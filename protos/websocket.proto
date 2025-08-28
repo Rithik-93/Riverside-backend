@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package websocket;
+
+option go_package = "github.com/lakeside/microservices/protos/websocket";
+
+service WebSocketService {
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+}

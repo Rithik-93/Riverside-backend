@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package media;
+
+option go_package = "github.com/lakeside/microservices/protos/media";
+
+service MediaService {
+  rpc ProcessMedia(ProcessMediaRequest) returns (ProcessMediaResponse);
+}

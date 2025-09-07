@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lakeside/services/session-service/internal/domain"
 	"github.com/lakeside/services/session-service/internal/handlers"
+	"github.com/lakeside/services/session-service/internal/infrastructure"
 	"github.com/lakeside/services/session-service/internal/infrastructure/database"
 	"github.com/lakeside/services/session-service/internal/infrastructure/repository"
 	"github.com/lakeside/services/session-service/internal/service"
@@ -34,6 +35,13 @@ func main() {
 	authService := domain.NewAuthService(userRepo, sessionRepo, tokenService, oauthService)
 	
 	authHandler := handlers.NewAuthHandler(authService)
+
+	// Start Redis consumer for signaling events
+	redisConsumer := infrastructure.NewRedisConsumer(db)
+	if redisConsumer != nil {
+		go redisConsumer.StartConsuming()
+		log.Println("Redis consumer started")
+	}
 
 	router := gin.Default()
 

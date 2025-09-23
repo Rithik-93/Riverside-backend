@@ -7,7 +7,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// User represents a user in the domain layer
 type User struct {
 	ID        string    `gorm:"primaryKey"`
 	Email     string    `gorm:"uniqueIndex;not null"`

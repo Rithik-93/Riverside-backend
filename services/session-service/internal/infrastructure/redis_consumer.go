@@ -33,6 +33,8 @@ const (
 	EventRoomLeft           = "room_left"
 	EventCallStarted        = "call_started"
 	EventCallEnded          = "call_ended"
+	EventRecordingStarted   = "recording_started"
+	EventRecordingStopped   = "recording_stopped"
 )
 
 func NewRedisConsumer(db *gorm.DB) *RedisConsumer {
@@ -113,6 +115,10 @@ func (r *RedisConsumer) processEvent(event *SignalingEvent) error {
 		return r.handleCallStarted(event)
 	case EventCallEnded:
 		return r.handleCallEnded(event)
+	case EventRecordingStarted:
+		return r.handleRecordingStarted(event)
+	case EventRecordingStopped:
+		return r.handleRecordingStopped(event)
 	default:
 		r.logger.Printf("Unknown event type: %s", event.EventType)
 		return nil
@@ -120,79 +126,74 @@ func (r *RedisConsumer) processEvent(event *SignalingEvent) error {
 }
 
 func (r *RedisConsumer) handleClientConnected(event *SignalingEvent) error {
-	connection := &ClientConnection{
-		ClientID:    event.ClientID,
-		UserID:      event.UserID,
-		ConnectedAt: time.Unix(event.Timestamp, 0),
-		UserAgent:   getStringFromData(event.Data, "userAgent"),
-		IPAddress:   getStringFromData(event.Data, "ipAddress"),
-		IsActive:    true,
-	}
-
-	return r.db.Where("client_id = ?", event.ClientID).Assign(connection).FirstOrCreate(connection).Error
+	r.logger.Printf("Client connected: %s for user: %s", event.ClientID, event.UserID)
+	return nil
 }
 
 func (r *RedisConsumer) handleClientDisconnected(event *SignalingEvent) error {
-	duration := getInt64FromData(event.Data, "duration")
-
-	return r.db.Model(&ClientConnection{}).
-		Where("client_id = ?", event.ClientID).
-		Updates(map[string]interface{}{
-			"is_active":       false,
-			"disconnected_at": time.Now(),
-			"duration_ms":     duration,
-		}).Error
+	r.logger.Printf("Client disconnected: %s for user: %s", event.ClientID, event.UserID)
+	return nil
 }
 
 func (r *RedisConsumer) handleRoomJoined(event *SignalingEvent) error {
-	participation := &RoomParticipation{
-		UserID:   event.UserID,
-		ClientID: event.ClientID,
-		RoomID:   event.RoomID,
-		JoinedAt: time.Unix(event.Timestamp, 0),
-		IsActive: true,
+	var pod Pod
+	if err := r.db.Where("id = ?", event.RoomID).First(&pod).Error; err != nil {
+		return err
 	}
 
-	return r.db.Where("user_id = ? AND room_id = ? AND client_id = ?",
-		event.UserID, event.RoomID, event.ClientID).
-		Assign(participation).FirstOrCreate(participation).Error
+	participant := &PodParticipant{
+		PodID:    pod.ID,
+		UserID:   event.UserID,
+		JoinedAt: time.Unix(event.Timestamp, 0),
+	}
+
+	return r.db.Where("pod_id = ? AND user_id = ?", pod.ID, event.UserID).
+		Assign(participant).FirstOrCreate(participant).Error
 }
 
 func (r *RedisConsumer) handleRoomLeft(event *SignalingEvent) error {
-	return r.db.Model(&RoomParticipation{}).
-		Where("user_id = ? AND room_id = ? AND client_id = ?",
-			event.UserID, event.RoomID, event.ClientID).
-		Updates(map[string]interface{}{
-			"is_active": false,
-			"left_at":   time.Now(),
-		}).Error
+	var pod Pod
+	if err := r.db.Where("id = ?", event.RoomID).First(&pod).Error; err != nil {
+		return err
+	}
+
+	return r.db.Where("pod_id = ? AND user_id = ?", pod.ID, event.UserID).
+		Delete(&PodParticipant{}).Error
 }
 
 func (r *RedisConsumer) handleCallStarted(event *SignalingEvent) error {
 	targetUserID := getStringFromData(event.Data, "targetUserId")
-
-	callSession := &CallSession{
-		UserID:       event.UserID,
-		ClientID:     event.ClientID,
-		RoomID:       event.RoomID,
-		TargetUserID: targetUserID,
-		StartedAt:    time.Unix(event.Timestamp, 0),
-		IsActive:     true,
+	
+	pod := &Pod{
+		HostUserID:       event.UserID,
+		TargetUserID:     &targetUserID,
+		ParticipantCount: 1,
+		Status:           StatusOngoing,
+		IsRecording:      false,
+		StartedAt:        time.Unix(event.Timestamp, 0),
+		IsActive:         true,
 	}
 
-	return r.db.Create(callSession).Error
+	if err := r.db.Create(pod).Error; err != nil {
+		return err
+	}
+
+	participant := &PodParticipant{
+		PodID:    pod.ID,
+		UserID:   event.UserID,
+		JoinedAt: time.Unix(event.Timestamp, 0),
+	}
+
+	return r.db.Create(participant).Error
 }
 
 func (r *RedisConsumer) handleCallEnded(event *SignalingEvent) error {
-	duration := getInt64FromData(event.Data, "duration")
-
-	return r.db.Model(&CallSession{}).
-		Where("user_id = ? AND room_id = ? AND client_id = ? AND is_active = ?",
-			event.UserID, event.RoomID, event.ClientID, true).
+	return r.db.Model(&Pod{}).
+		Where("host_user_id = ? AND is_active = ?", event.UserID, true).
 		Updates(map[string]interface{}{
-			"is_active":   false,
-			"ended_at":    time.Now(),
-			"duration_ms": duration,
+			"status":     StatusCompleted,
+			"ended_at":   time.Now(),
+			"is_active":  false,
 		}).Error
 }
 
@@ -217,4 +218,22 @@ func getInt64FromData(data map[string]interface{}, key string) int64 {
 		}
 	}
 	return 0
+}
+
+func (r *RedisConsumer) handleRecordingStarted(event *SignalingEvent) error {
+	var pod Pod
+	if err := r.db.Where("id = ?", event.RoomID).First(&pod).Error; err != nil {
+		return err
+	}
+
+	return r.db.Model(&pod).Update("is_recording", true).Error
+}
+
+func (r *RedisConsumer) handleRecordingStopped(event *SignalingEvent) error {
+	var pod Pod
+	if err := r.db.Where("id = ?", event.RoomID).First(&pod).Error; err != nil {
+		return err
+	}
+
+	return r.db.Model(&pod).Update("is_recording", false).Error
 }

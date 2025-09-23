@@ -36,7 +36,6 @@ func main() {
 	
 	authHandler := handlers.NewAuthHandler(authService)
 
-	// Start Redis consumer for signaling events
 	redisConsumer := infrastructure.NewRedisConsumer(db)
 	if redisConsumer != nil {
 		go redisConsumer.StartConsuming()
@@ -69,11 +68,12 @@ func main() {
 		auth.POST("/refresh", authHandler.RefreshToken)
 		auth.POST("/logout", authHandler.Logout)
 		auth.POST("/oauth", authHandler.OAuthLogin)
+		auth.GET("/validate", authHandler.ValidateToken)
 	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "8081"
 	}
 
 	log.Printf("Server starting on port %s", port)

@@ -4,70 +4,42 @@ import (
 	"time"
 )
 
-type ClientConnection struct {
-	ID             uint      `gorm:"primaryKey"`
-	ClientID       string    `gorm:"uniqueIndex;not null"`
-	UserID         string    `gorm:"index;not null"`
-	ConnectedAt    time.Time `gorm:"not null"`
-	DisconnectedAt *time.Time
-	UserAgent      string `gorm:"size:500"`
-	IPAddress      string `gorm:"size:45"`
-	IsActive       bool   `gorm:"not null;default:true"`
-	DurationMs     int64  `gorm:"default:0"`
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+type Status string
+
+const (
+	StatusOngoing   Status = "ONGOING"
+	StatusCompleted Status = "COMPLETED"
+	StatusCancelled Status = "CANCELLED"
+	StatusFailed    Status = "FAILED"
+)
+
+
+type Pod struct {
+	ID                uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	HostUserID        string    `gorm:"index;not null" json:"host_user_id"`
+	TargetUserID      *string   `gorm:"index" json:"target_user_id"`
+	ParticipantCount  int       `gorm:"default:1" json:"participant_count"`
+	Status            Status    `gorm:"index;default:ONGOING" json:"status"`
+	IsRecording       bool      `gorm:"default:false" json:"is_recording"`
+	StartedAt         time.Time `gorm:"not null;default:now()" json:"started_at"`
+	EndedAt           *time.Time `json:"ended_at"`
+	IsActive          bool      `gorm:"default:true" json:"is_active"`
+	CreatedAt         time.Time `gorm:"not null;default:now()" json:"created_at"`
+	UpdatedAt         time.Time `gorm:"not null;default:now()" json:"updated_at"`
 }
 
-func (ClientConnection) TableName() string {
-	return "client_connections"
+func (Pod) TableName() string {
+	return "pods"
 }
 
-type RoomParticipation struct {
-	ID        uint      `gorm:"primaryKey"`
-	UserID    string    `gorm:"index;not null"`
-	ClientID  string    `gorm:"index;not null"`
-	RoomID    string    `gorm:"index;not null"`
-	JoinedAt  time.Time `gorm:"not null"`
-	LeftAt    *time.Time
-	IsActive  bool `gorm:"not null;default:true"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+type PodParticipant struct {
+	PodID    uint64 `gorm:"primaryKey;autoIncrement:false"`
+	UserID   string `gorm:"primaryKey"`
+	JoinedAt time.Time `gorm:"not null;default:now()"`
 }
 
-func (RoomParticipation) TableName() string {
-	return "room_participations"
+func (PodParticipant) TableName() string {
+	return "pod_participants"
 }
 
-type CallSession struct {
-	ID           uint      `gorm:"primaryKey"`
-	UserID       string    `gorm:"index;not null"`
-	ClientID     string    `gorm:"index;not null"`
-	RoomID       string    `gorm:"index;not null"`
-	TargetUserID string    `gorm:"index"`
-	StartedAt    time.Time `gorm:"not null"`
-	EndedAt      *time.Time
-	IsActive     bool  `gorm:"not null;default:true"`
-	DurationMs   int64 `gorm:"default:0"`
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-}
 
-func (CallSession) TableName() string {
-	return "call_sessions"
-}
-
-type SignalingEventAudit struct {
-	ID          uint      `gorm:"primaryKey"`
-	EventType   string    `gorm:"index;not null"`
-	UserID      string    `gorm:"index"`
-	ClientID    string    `gorm:"index;not null"`
-	RoomID      string    `gorm:"index"`
-	Data        string    `gorm:"type:jsonb"` // Store raw JSON data
-	Timestamp   int64     `gorm:"not null"`
-	ProcessedAt time.Time `gorm:"not null"`
-	CreatedAt   time.Time
-}
-
-func (SignalingEventAudit) TableName() string {
-	return "signaling_events"
-}

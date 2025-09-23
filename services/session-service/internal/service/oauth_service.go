@@ -16,7 +16,7 @@ import (
 
 type OAuthService struct {
 	googleConfig *oauth2.Config
-	stateStore   map[string]bool // In production, use Redis or database
+	stateStore   map[string]bool
 }
 
 func NewOAuthService(clientID, clientSecret, redirectURL string) *OAuthService {

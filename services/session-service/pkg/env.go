@@ -1,8 +1,18 @@
 package pkg
 
-import "os"
+import (
+	"log"
+	"os"
+
+	"github.com/joho/godotenv"
+)
 
 func LoadEnv() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Printf("Warning: .env file not found or could not be loaded: %v", err)
+	}
+
 	if os.Getenv("DB_HOST") == "" {
 		os.Setenv("DB_HOST", "localhost")
 	}

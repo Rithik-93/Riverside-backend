@@ -37,10 +37,8 @@ func Connect() *gorm.DB {
 	err = db.AutoMigrate(
 		&domain.User{}, 
 		&domain.Session{},
-		&infrastructure.ClientConnection{},
-		&infrastructure.RoomParticipation{},
-		&infrastructure.CallSession{},
-		&infrastructure.SignalingEventAudit{},
+		&infrastructure.Pod{},
+		&infrastructure.PodParticipant{},
 	)
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)

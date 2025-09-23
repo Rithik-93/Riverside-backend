@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lakeside/services/session-service/internal/domain"
@@ -51,20 +52,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Basic validation
 	if req.Email == "" || req.Password == "" {
 		c.JSON(http.StatusBadRequest, types.NewErrorResponse("Email and password are required", http.StatusBadRequest))
 		return
 	}
 
-	// Call auth service
 	authResponse, err := h.authService.LoginUser(req.Email, req.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, types.NewErrorResponse(err.Error(), http.StatusUnauthorized))
 		return
 	}
 
-	// Return success response
 	c.JSON(http.StatusOK, types.SuccessResponse(authResponse, "Login successful"))
 }
 
@@ -80,14 +78,12 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// Call auth service
 	authResponse, err := h.authService.RefreshToken(req.RefreshToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, types.NewErrorResponse(err.Error(), http.StatusUnauthorized))
 		return
 	}
 
-	// Return success response
 	c.JSON(http.StatusOK, types.SuccessResponse(authResponse, "Token refreshed successfully"))
 }
 
@@ -103,14 +99,12 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	// Call auth service
 	err := h.authService.LogoutUser(req.RefreshToken)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, types.NewErrorResponse(err.Error(), http.StatusBadRequest))
 		return
 	}
 
-	// Return success response
 	c.JSON(http.StatusOK, types.SuccessResponse(nil, "Logout successful"))
 }
 
@@ -126,13 +120,36 @@ func (h *AuthHandler) OAuthLogin(c *gin.Context) {
 		return
 	}
 
-	// Call auth service
+
 	authResponse, err := h.authService.OAuthLogin(req.Provider, req.Code, req.State)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, types.NewErrorResponse(err.Error(), http.StatusBadRequest))
 		return
 	}
 
-	// Return success response
+
 	c.JSON(http.StatusOK, types.SuccessResponse(authResponse, "OAuth login successful"))
+}
+
+func (h *AuthHandler) ValidateToken(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("Authorization header required", http.StatusUnauthorized))
+		return
+	}
+
+	tokenParts := strings.Split(authHeader, " ")
+	if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("Invalid authorization header format", http.StatusUnauthorized))
+		return
+	}
+
+	token := tokenParts[1]
+	claims, err := h.authService.ValidateToken(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("Invalid token", http.StatusUnauthorized))
+		return
+	}
+
+	c.JSON(http.StatusOK, types.SuccessResponse(claims, "Token is valid"))
 }

@@ -12,7 +12,39 @@ import (
 	"github.com/lakeside/services/session-service/internal/infrastructure/repository"
 	"github.com/lakeside/services/session-service/internal/service"
 	"github.com/lakeside/services/session-service/pkg"
+	"github.com/redis/go-redis/v9"
+	"strings"
 )
+
+func authMiddleware(tokenService *service.TokenService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(401, gin.H{"error": "Authorization header required"})
+			c.Abort()
+			return
+		}
+
+		tokenParts := strings.Split(authHeader, " ")
+		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+			c.JSON(401, gin.H{"error": "Invalid authorization header format"})
+			c.Abort()
+			return
+		}
+
+		claims, err := tokenService.ValidateAccessToken(tokenParts[1])
+		if err != nil {
+			c.JSON(401, gin.H{"error": "Invalid token"})
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims.UserID)
+		c.Set("user_email", claims.Email)
+		c.Set("user_username", claims.Username)
+		c.Next()
+	}
+}
 
 func main() {
 	pkg.LoadEnv()
@@ -32,7 +64,14 @@ func main() {
 		os.Getenv("GOOGLE_REDIRECT_URL"),
 	)
 
-	authService := domain.NewAuthService(userRepo, sessionRepo, tokenService, oauthService)
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     os.Getenv("REDIS_ADDR"),
+		Password: os.Getenv("REDIS_PASSWORD"),
+		DB:       0,
+	})
+
+	redisSessionService := infrastructure.NewRedisSessionService(redisClient)
+	authService := domain.NewAuthService(userRepo, sessionRepo, tokenService, oauthService, redisSessionService)
 	
 	authHandler := handlers.NewAuthHandler(authService)
 
@@ -69,6 +108,14 @@ func main() {
 		auth.POST("/logout", authHandler.Logout)
 		auth.POST("/oauth", authHandler.OAuthLogin)
 		auth.GET("/validate", authHandler.ValidateToken)
+	}
+
+	sessions := router.Group("/sessions")
+	sessions.Use(authMiddleware(tokenService))
+	{
+		sessions.POST("", authHandler.CreateSession)
+		sessions.GET("/:sessionId", authHandler.ValidateSession)
+		sessions.DELETE("/:sessionId", authHandler.DeleteSession)
 	}
 
 	port := os.Getenv("PORT")

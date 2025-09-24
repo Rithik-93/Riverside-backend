@@ -153,3 +153,72 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 
 	c.JSON(http.StatusOK, types.SuccessResponse(claims, "Token is valid"))
 }
+
+func (h *AuthHandler) CreateSession(c *gin.Context) {
+	// Get user ID from JWT token
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("User not authenticated", http.StatusUnauthorized))
+		return
+	}
+
+	var req struct {
+		RoomID string `json:"room_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("Room ID is required", http.StatusBadRequest))
+		return
+	}
+
+	authHeader := c.GetHeader("Authorization")
+	tokenParts := strings.Split(authHeader, " ")
+	if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("Invalid authorization header", http.StatusUnauthorized))
+		return
+	}
+
+	sessionID, err := h.authService.CreateSession(userID.(string), tokenParts[1], req.RoomID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse(err.Error(), http.StatusInternalServerError))
+		return
+	}
+
+	c.JSON(http.StatusCreated, types.SuccessResponse(gin.H{"session_id": sessionID}, "Session created successfully"))
+}
+
+func (h *AuthHandler) ValidateSession(c *gin.Context) {
+	sessionID := c.Param("sessionId")
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("Session ID is required", http.StatusBadRequest))
+		return
+	}
+
+	valid, sessionData, err := h.authService.ValidateSession(sessionID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, types.NewErrorResponse("Session not found or invalid", http.StatusNotFound))
+		return
+	}
+
+	if !valid {
+		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("Session is inactive or expired", http.StatusUnauthorized))
+		return
+	}
+
+	c.JSON(http.StatusOK, types.SuccessResponse(sessionData, "Session is valid"))
+}
+
+func (h *AuthHandler) DeleteSession(c *gin.Context) {
+	sessionID := c.Param("sessionId")
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("Session ID is required", http.StatusBadRequest))
+		return
+	}
+
+	err := h.authService.DeleteSession(sessionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse(err.Error(), http.StatusInternalServerError))
+		return
+	}
+
+	c.JSON(http.StatusOK, types.SuccessResponse(nil, "Session deleted successfully"))
+}

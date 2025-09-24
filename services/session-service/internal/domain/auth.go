@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lakeside/services/session-service/internal/infrastructure"
 	"github.com/lakeside/services/session-service/pkg/types"
 )
 
@@ -14,6 +15,9 @@ type AuthService interface {
 	LogoutUser(refreshToken string) error
 	ValidateToken(token string) (*types.TokenClaims, error)
 	OAuthLogin(provider, code, state string) (*types.AuthResponse, error)
+	CreateSession(userID, accessToken, roomID string) (string, error)
+	ValidateSession(sessionID string) (bool, *infrastructure.SessionData, error)
+	DeleteSession(sessionID string) error
 }
 
 func (a *authService) RegisterUser(email, username, fullName, password string) (*types.AuthResponse, error) {
@@ -67,18 +71,20 @@ func (a *authService) RegisterUser(email, username, fullName, password string) (
 
 
 type authService struct {
-	userRepo    UserRepository
-	sessionRepo SessionRepository
-	tokenService TokenService
-	oauthService OAuthService
+	userRepo         UserRepository
+	sessionRepo      SessionRepository
+	tokenService     TokenService
+	oauthService     OAuthService
+	redisSessionSvc  *infrastructure.RedisSessionService
 }
 
-func NewAuthService(userRepo UserRepository, sessionRepo SessionRepository, tokenService TokenService, oauthService OAuthService) AuthService {
+func NewAuthService(userRepo UserRepository, sessionRepo SessionRepository, tokenService TokenService, oauthService OAuthService, redisSessionSvc *infrastructure.RedisSessionService) AuthService {
 	return &authService{
-		userRepo:     userRepo,
-		sessionRepo:  sessionRepo,
-		tokenService: tokenService,
-		oauthService: oauthService,
+		userRepo:        userRepo,
+		sessionRepo:     sessionRepo,
+		tokenService:    tokenService,
+		oauthService:    oauthService,
+		redisSessionSvc: redisSessionSvc,
 	}
 }
 
@@ -126,19 +132,9 @@ func (a *authService) LoginUser(email, password string) (*types.AuthResponse, er
 }
 
 func (a *authService) RefreshToken(refreshToken string) (*types.AuthResponse, error) {
-	claims, err := a.tokenService.ValidateRefreshToken(refreshToken)
+	_, err := a.tokenService.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		return nil, errors.New("invalid refresh token")
-	}
-
-	userID := claims.UserID
-	if userID == "" {
-		return nil, errors.New("invalid user ID")
-	}
-
-	user, err := a.userRepo.GetByID(userID)
-	if err != nil {
-		return nil, errors.New("user not found")
 	}
 
 	session, err := a.sessionRepo.GetByRefreshToken(refreshToken)
@@ -148,6 +144,11 @@ func (a *authService) RefreshToken(refreshToken string) (*types.AuthResponse, er
 
 	if session.IsExpired() {
 		return nil, errors.New("refresh token expired")
+	}
+
+	user, err := a.userRepo.GetByID(session.UserID)
+	if err != nil {
+		return nil, errors.New("user not found")
 	}
 
 	accessToken, newRefreshToken, err := a.tokenService.GenerateTokenPair(user.ID, user.Email, user.Username)
@@ -231,4 +232,35 @@ func (a *authService) OAuthLogin(provider, code, state string) (*types.AuthRespo
 		RefreshToken: refreshToken,
 		ExpiresIn:    24 * 60 * 60,
 	}, nil
+}
+
+func (a *authService) CreateSession(userID, accessToken, roomID string) (string, error) {
+	if a.redisSessionSvc == nil {
+		return "", errors.New("Redis session service not available")
+	}
+
+	sessionID := generateID()
+	
+	err := a.redisSessionSvc.CreateSession(sessionID, userID, accessToken, roomID, 2*time.Hour)
+	if err != nil {
+		return "", err
+	}
+
+	return sessionID, nil
+}
+
+func (a *authService) ValidateSession(sessionID string) (bool, *infrastructure.SessionData, error) {
+	if a.redisSessionSvc == nil {
+		return false, nil, errors.New("Redis session service not available")
+	}
+
+	return a.redisSessionSvc.ValidateSession(sessionID)
+}
+
+func (a *authService) DeleteSession(sessionID string) error {
+	if a.redisSessionSvc == nil {
+		return errors.New("Redis session service not available")
+	}
+
+	return a.redisSessionSvc.DeleteSession(sessionID)
 }

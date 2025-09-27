@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lakeside/services/session-service/internal/domain"
@@ -63,47 +62,46 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	c.SetCookie("access_token", authResponse.AccessToken, 24*60*60, "/", "", false, true)  // 24 hours, HTTP-only
+	c.SetCookie("refresh_token", authResponse.RefreshToken, 7*24*60*60, "/", "", false, true)  // 7 days, HTTP-only
+
 	c.JSON(http.StatusOK, types.SuccessResponse(authResponse, "Login successful"))
 }
 
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	var req types.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, types.NewErrorResponse("Invalid request body", http.StatusBadRequest))
-		return
-	}
-
-	if req.RefreshToken == "" {
+	refreshToken, err := c.Cookie("refresh_token")
+	if err != nil || refreshToken == "" {
 		c.JSON(http.StatusBadRequest, types.NewErrorResponse("Refresh token is required", http.StatusBadRequest))
 		return
 	}
 
-	authResponse, err := h.authService.RefreshToken(req.RefreshToken)
+	authResponse, err := h.authService.RefreshToken(refreshToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, types.NewErrorResponse(err.Error(), http.StatusUnauthorized))
 		return
 	}
 
+	c.SetCookie("access_token", authResponse.AccessToken, 24*60*60, "/", "", false, true)  // 24 hours, HTTP-only
+	c.SetCookie("refresh_token", authResponse.RefreshToken, 7*24*60*60, "/", "", false, true)  // 7 days, HTTP-only
+
 	c.JSON(http.StatusOK, types.SuccessResponse(authResponse, "Token refreshed successfully"))
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	var req types.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, types.NewErrorResponse("Invalid request body", http.StatusBadRequest))
-		return
-	}
-
-	if req.RefreshToken == "" {
+	refreshToken, err := c.Cookie("refresh_token")
+	if err != nil || refreshToken == "" {
 		c.JSON(http.StatusBadRequest, types.NewErrorResponse("Refresh token is required", http.StatusBadRequest))
 		return
 	}
 
-	err := h.authService.LogoutUser(req.RefreshToken)
+	err = h.authService.LogoutUser(refreshToken)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, types.NewErrorResponse(err.Error(), http.StatusBadRequest))
 		return
 	}
+
+	c.SetCookie("access_token", "", -1, "/", "", false, true)
+	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
 
 	c.JSON(http.StatusOK, types.SuccessResponse(nil, "Logout successful"))
 }
@@ -132,19 +130,12 @@ func (h *AuthHandler) OAuthLogin(c *gin.Context) {
 }
 
 func (h *AuthHandler) ValidateToken(c *gin.Context) {
-	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("Authorization header required", http.StatusUnauthorized))
+	token, err := c.Cookie("access_token")
+	if err != nil || token == "" {
+		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("Access token required", http.StatusUnauthorized))
 		return
 	}
 
-	tokenParts := strings.Split(authHeader, " ")
-	if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
-		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("Invalid authorization header format", http.StatusUnauthorized))
-		return
-	}
-
-	token := tokenParts[1]
 	claims, err := h.authService.ValidateToken(token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("Invalid token", http.StatusUnauthorized))
@@ -154,37 +145,6 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 	c.JSON(http.StatusOK, types.SuccessResponse(claims, "Token is valid"))
 }
 
-func (h *AuthHandler) CreateSession(c *gin.Context) {
-	// Get user ID from JWT token
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("User not authenticated", http.StatusUnauthorized))
-		return
-	}
-
-	var req struct {
-		RoomID string `json:"room_id" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, types.NewErrorResponse("Room ID is required", http.StatusBadRequest))
-		return
-	}
-
-	authHeader := c.GetHeader("Authorization")
-	tokenParts := strings.Split(authHeader, " ")
-	if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
-		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("Invalid authorization header", http.StatusUnauthorized))
-		return
-	}
-
-	sessionID, err := h.authService.CreateSession(userID.(string), tokenParts[1], req.RoomID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, types.NewErrorResponse(err.Error(), http.StatusInternalServerError))
-		return
-	}
-
-	c.JSON(http.StatusCreated, types.SuccessResponse(gin.H{"session_id": sessionID}, "Session created successfully"))
-}
 
 func (h *AuthHandler) ValidateSession(c *gin.Context) {
 	sessionID := c.Param("sessionId")

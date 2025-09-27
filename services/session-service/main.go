@@ -13,26 +13,18 @@ import (
 	"github.com/lakeside/services/session-service/internal/service"
 	"github.com/lakeside/services/session-service/pkg"
 	"github.com/redis/go-redis/v9"
-	"strings"
 )
 
 func authMiddleware(tokenService *service.TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(401, gin.H{"error": "Authorization header required"})
+		token, err := c.Cookie("access_token")
+		if err != nil || token == "" {
+			c.JSON(401, gin.H{"error": "Access token required"})
 			c.Abort()
 			return
 		}
 
-		tokenParts := strings.Split(authHeader, " ")
-		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
-			c.JSON(401, gin.H{"error": "Invalid authorization header format"})
-			c.Abort()
-			return
-		}
-
-		claims, err := tokenService.ValidateAccessToken(tokenParts[1])
+		claims, err := tokenService.ValidateAccessToken(token)
 		if err != nil {
 			c.JSON(401, gin.H{"error": "Invalid token"})
 			c.Abort()
@@ -54,9 +46,12 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
 
+	accessSecret := "secret"
+	refreshSecret := "secret"
+
 	tokenService := service.NewTokenService(
-		os.Getenv("JWT_ACCESS_SECRET"),
-		os.Getenv("JWT_REFRESH_SECRET"),
+		accessSecret,
+		refreshSecret,
 	)
 	oauthService := service.NewOAuthService(
 		os.Getenv("GOOGLE_CLIENT_ID"),
@@ -84,9 +79,10 @@ func main() {
 	router := gin.Default()
 
 	router.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Origin", "http://localhost:5173")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "*")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Header("Access-Control-Allow-Credentials", "true")
 		
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
@@ -113,7 +109,6 @@ func main() {
 	sessions := router.Group("/sessions")
 	sessions.Use(authMiddleware(tokenService))
 	{
-		sessions.POST("", authHandler.CreateSession)
 		sessions.GET("/:sessionId", authHandler.ValidateSession)
 		sessions.DELETE("/:sessionId", authHandler.DeleteSession)
 	}

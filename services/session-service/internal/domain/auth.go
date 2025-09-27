@@ -15,7 +15,6 @@ type AuthService interface {
 	LogoutUser(refreshToken string) error
 	ValidateToken(token string) (*types.TokenClaims, error)
 	OAuthLogin(provider, code, state string) (*types.AuthResponse, error)
-	CreateSession(userID, accessToken, roomID string) (string, error)
 	ValidateSession(sessionID string) (bool, *infrastructure.SessionData, error)
 	DeleteSession(sessionID string) error
 }
@@ -232,21 +231,6 @@ func (a *authService) OAuthLogin(provider, code, state string) (*types.AuthRespo
 		RefreshToken: refreshToken,
 		ExpiresIn:    24 * 60 * 60,
 	}, nil
-}
-
-func (a *authService) CreateSession(userID, accessToken, roomID string) (string, error) {
-	if a.redisSessionSvc == nil {
-		return "", errors.New("Redis session service not available")
-	}
-
-	sessionID := generateID()
-	
-	err := a.redisSessionSvc.CreateSession(sessionID, userID, accessToken, roomID, 2*time.Hour)
-	if err != nil {
-		return "", err
-	}
-
-	return sessionID, nil
 }
 
 func (a *authService) ValidateSession(sessionID string) (bool, *infrastructure.SessionData, error) {

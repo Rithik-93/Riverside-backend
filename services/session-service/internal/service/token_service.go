@@ -21,7 +21,7 @@ func NewTokenService(accessSecret, refreshSecret string) *TokenService {
 	return &TokenService{
 		accessTokenSecret:  accessSecret,
 		refreshTokenSecret: refreshSecret,
-		accessTokenExpiry:  15 * time.Minute,
+		accessTokenExpiry:  2 * time.Minute,
 		refreshTokenExpiry: 7 * 24 * time.Hour,
 	}
 }
@@ -85,9 +85,19 @@ func (t *TokenService) ValidateAccessToken(tokenString string) (*types.TokenClai
 }
 
 func (t *TokenService) ValidateRefreshToken(refreshToken string) (*types.TokenClaims, error) {
-
+	// Refresh tokens are just random strings stored in database, not JWTs
+	// The actual validation happens in auth.go by looking up the refresh token
+	// This method should just return success - the real validation is in the auth service
+	
+	// Just validate that the refresh token is not empty
+	if refreshToken == "" {
+		return nil, fmt.Errorf("refresh token is empty")
+	}
+	
+	// Return a valid claims structure - the UserID will be set by the auth service
+	// after it looks up the refresh token in the database
 	return &types.TokenClaims{
-		UserID: "",
+		UserID: "valid", // This indicates the token format is valid
 		Exp:    time.Now().Add(t.refreshTokenExpiry).Unix(),
 	}, nil
 }

@@ -34,16 +34,43 @@ func Connect() *gorm.DB {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	err = db.AutoMigrate(
-		&domain.User{}, 
-		&domain.Session{},
-		&infrastructure.Pod{},
-		&infrastructure.PodParticipant{},
-	)
-	if err != nil {
-		log.Fatal("Failed to migrate database:", err)
+	if shouldMigrate(db) {
+		log.Println("Running database migrations...")
+		err = db.AutoMigrate(
+			&domain.User{}, 
+			&domain.Session{},
+			&infrastructure.Pod{},
+			&infrastructure.PodParticipant{},
+		)
+		if err != nil {
+			log.Fatal("Failed to migrate database:", err)
+		}
+		log.Println("Database migrations completed successfully")
+	} else {
+		log.Println("Database tables already exist, skipping migration")
 	}
 
-	log.Println("Database connected and migrated successfully")
+	log.Println("Database connected successfully")
 	return db
+}
+
+func shouldMigrate(db *gorm.DB) bool {
+	// Check if users table exists (our main table)
+	if !db.Migrator().HasTable(&domain.User{}) {
+		return true
+	}
+	
+	if !db.Migrator().HasTable(&domain.Session{}) {
+		return true
+	}
+	
+	if !db.Migrator().HasTable(&infrastructure.Pod{}) {
+		return true
+	}
+	
+	if !db.Migrator().HasTable(&infrastructure.PodParticipant{}) {
+		return true
+	}
+	
+	return false
 }

@@ -35,6 +35,17 @@ type OAuthUser struct {
 	ProviderID string `json:"provider_id"`
 }
 
+type OAuthSession struct {
+	Provider string `json:"provider" validate:"required"`
+	Code     string `json:"code" validate:"required"`
+	State    string `json:"state" validate:"required"`
+}
+
+type OAuthURLResponse struct {
+	AuthURL string `json:"auth_url"`
+	State   string `json:"state"`
+}
+
 type UserResponse struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`

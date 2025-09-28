@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lakeside/services/session-service/internal/auth"
 	"github.com/lakeside/services/session-service/internal/domain"
 	"github.com/lakeside/services/session-service/internal/handlers"
 	"github.com/lakeside/services/session-service/internal/infrastructure"
@@ -41,6 +42,8 @@ func authMiddleware(tokenService *service.TokenService) gin.HandlerFunc {
 func main() {
 	pkg.LoadEnv()
 
+	auth.NewAuth()
+
 	db := database.Connect()
 
 	userRepo := repository.NewUserRepository(db)
@@ -53,11 +56,6 @@ func main() {
 		accessSecret,
 		refreshSecret,
 	)
-	oauthService := service.NewOAuthService(
-		os.Getenv("GOOGLE_CLIENT_ID"),
-		os.Getenv("GOOGLE_CLIENT_SECRET"),
-		os.Getenv("GOOGLE_REDIRECT_URL"),
-	)
 
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     os.Getenv("REDIS_ADDR"),
@@ -66,7 +64,7 @@ func main() {
 	})
 
 	redisSessionService := infrastructure.NewRedisSessionService(redisClient)
-	authService := domain.NewAuthService(userRepo, sessionRepo, tokenService, oauthService, redisSessionService)
+	authService := domain.NewAuthService(userRepo, sessionRepo, tokenService, nil, redisSessionService)
 	
 	authHandler := handlers.NewAuthHandler(authService)
 
@@ -96,14 +94,15 @@ func main() {
 		c.JSON(200, gin.H{"status": "OK"})
 	})
 
-	auth := router.Group("/auth")
+	authGroup := router.Group("/auth")
 	{
-		auth.POST("/register", authHandler.Register)
-		auth.POST("/login", authHandler.Login)
-		auth.POST("/refresh", authHandler.RefreshToken)
-		auth.POST("/logout", authHandler.Logout)
-		auth.POST("/oauth", authHandler.OAuthLogin)
-		auth.GET("/validate", authHandler.ValidateToken)
+		authGroup.POST("/register", authHandler.Register)
+		authGroup.POST("/login", authHandler.Login)
+		authGroup.POST("/refresh", authHandler.RefreshToken)
+		authGroup.POST("/logout", authHandler.Logout)
+		authGroup.GET("/:provider", auth.BeginAuth)
+		authGroup.GET("/:provider/callback", auth.AuthController)
+		authGroup.GET("/validate", authHandler.ValidateToken)
 	}
 
 	sessions := router.Group("/sessions")

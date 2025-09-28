@@ -66,12 +66,6 @@ func (t *TokenClaims) GetAudience() (jwt.ClaimStrings, error) {
 	return nil, nil
 }
 
-type OAuthSession struct {
-	Provider    string `json:"provider"`
-	State       string `json:"state"`
-	Code        string `json:"code"`
-	RedirectURI string `json:"redirect_uri"`
-}
 
 type SessionResponse struct {
 	ID           string    `json:"id"`

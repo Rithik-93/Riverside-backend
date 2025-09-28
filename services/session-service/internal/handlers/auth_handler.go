@@ -182,3 +182,24 @@ func (h *AuthHandler) DeleteSession(c *gin.Context) {
 
 	c.JSON(http.StatusOK, types.SuccessResponse(nil, "Session deleted successfully"))
 }
+
+func (h *AuthHandler) GetOAuthURL(c *gin.Context) {
+	provider := c.Param("provider")
+	if provider == "" {
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("Provider is required", http.StatusBadRequest))
+		return
+	}
+
+	authURL, state, err := h.authService.GetOAuthURL(provider)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse(err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	response := types.OAuthURLResponse{
+		AuthURL: authURL,
+		State:   state,
+	}
+
+	c.JSON(http.StatusOK, types.SuccessResponse(response, "OAuth URL generated successfully"))
+}

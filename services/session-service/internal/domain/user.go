@@ -18,18 +18,23 @@ type User struct {
 }
 
 func NewUser(email, username, fullName, password string) (*User, error) {
-	if email == "" || username == "" || fullName == "" || password == "" {
-		return nil, errors.New("all fields are required")
+	if email == "" || username == "" || fullName == "" {
+		return nil, errors.New("email, username, and fullName are required")
 	}
 
-	if len(password) < 8 {
-		return nil, errors.New("password must be at least 8 characters long")
+	var hashedPassword string
+	if password != "" {
+		if len(password) < 8 {
+			return nil, errors.New("password must be at least 8 characters long")
+		}
+		var err error
+		hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, err
+		}
+		hashedPassword = string(hashed)
 	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
+	// For OAuth users, password remains empty string
 
 	now := time.Now()
 	return &User{
@@ -37,7 +42,7 @@ func NewUser(email, username, fullName, password string) (*User, error) {
 		Email:     email,
 		Username:  username,
 		FullName:  fullName,
-		Password:  string(hashedPassword),
+		Password:  hashedPassword, // Empty string for OAuth users
 		CreatedAt: now,
 		UpdatedAt: now,
 	}, nil
@@ -87,3 +92,4 @@ func randomString(length int) string {
 	}
 	return string(b)
 }
+

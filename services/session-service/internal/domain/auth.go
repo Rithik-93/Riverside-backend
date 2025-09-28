@@ -14,6 +14,7 @@ type AuthService interface {
 	RefreshToken(refreshToken string) (*types.AuthResponse, error)
 	LogoutUser(refreshToken string) error
 	ValidateToken(token string) (*types.TokenClaims, error)
+	GetOAuthURL(provider string) (string, string, error)
 	OAuthLogin(provider, code, state string) (*types.AuthResponse, error)
 	ValidateSession(sessionID string) (bool, *infrastructure.SessionData, error)
 	DeleteSession(sessionID string) error
@@ -184,6 +185,10 @@ func (a *authService) LogoutUser(refreshToken string) error {
 
 func (a *authService) ValidateToken(token string) (*types.TokenClaims, error) {
 	return a.tokenService.ValidateAccessToken(token)
+}
+
+func (a *authService) GetOAuthURL(provider string) (string, string, error) {
+	return a.oauthService.GetAuthURL(provider)
 }
 
 func (a *authService) OAuthLogin(provider, code, state string) (*types.AuthResponse, error) {

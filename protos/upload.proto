@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package lakeside.upload;
+
+option go_package = "github.com/lakeside/backend/protos/gen/upload;upload";
+
+// ChunkMetadata represents metadata for a single recording chunk
+message ChunkMetadata {
+  string s3_key = 1;
+  string recording_id = 2;
+  string podcast_id = 3;
+  string user_id = 4;
+  string timestamp = 5;
+  bool is_final = 6;
+  string file_name = 7;
+  int32 chunk_index = 8;
+  int64 file_size = 9;
+  int64 uploaded_at = 10; // Unix timestamp
+  string checksum = 11;
+}
+
+// RecordingSession represents a complete recording session
+message RecordingSession {
+  string user_id = 1;
+  string podcast_id = 2;
+  string recording_id = 3;
+  string session_id = 4;
+  repeated ChunkMetadata chunks = 5;
+  int64 start_time = 6; // Unix timestamp
+  bool is_complete = 7;
+  string state = 8; // started, finalizing, completed, revoked
+  int64 last_chunk_at = 9; // Unix timestamp
+  int64 grace_period_end = 10; // Unix timestamp
+}
+
+// PreSignedURLRequest - request for generating pre-signed S3 URL
+message PreSignedURLRequest {
+  string file_name = 1;
+  string content_type = 2;
+  string user_id = 3;
+  string podcast_id = 4;
+  string recording_id = 5;
+  bool is_final = 6;
+  bool is_chunk = 7;
+  string timestamp = 8;
+  int32 chunk_index = 9;
+  int64 file_size = 10;
+}
+
+// PreSignedURLResponse - response with pre-signed S3 URL
+message PreSignedURLResponse {
+  string pre_signed_url = 1;
+  string s3_key = 2;
+  int32 expires_in = 3;
+  string upload_id = 4;
+  int32 chunk_index = 5;
+}
+

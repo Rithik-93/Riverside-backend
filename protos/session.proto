@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package lakeside.session;
+
+option go_package = "github.com/lakeside/backend/protos/gen/session;session";
+
+// SessionData - stored in Redis for active user sessions
+message SessionData {
+  string user_id = 1;
+  string access_token = 2;
+  string room_id = 3;
+  string podcast_id = 4;
+  int64 started_at = 5; // Unix timestamp
+  int64 last_seen = 6; // Unix timestamp
+  bool is_active = 7;
+  bool is_host = 8;
+}
+
+// UploadSessionData - stored in Redis for upload sessions
+message UploadSessionData {
+  string user_id = 1;
+  string room_id = 2;
+  string state = 3;
+  int32 chunk_count = 4;
+  int64 started_at = 5; // Unix timestamp
+  int64 last_chunk_at = 6; // Unix timestamp
+}
+
+// RecordingSessionData - stored in Redis for recording sessions
+message RecordingSessionData {
+  string recording_id = 1;
+  string podcast_id = 2;
+  string host_user_id = 3;
+  string room_id = 4;
+  repeated string participants = 5;
+  string state = 6;
+  int64 started_at = 7; // Unix timestamp
+  int64 ended_at = 8; // Unix timestamp
+  int64 duration = 9;
+  int32 total_chunks = 10;
+  map<string, int32> participant_chunks = 11;
+  bool is_active = 12;
+}
+
+// Session state constants (for reference)
+// active, inactive, expired
+

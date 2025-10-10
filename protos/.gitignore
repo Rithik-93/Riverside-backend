@@ -1,0 +1,5 @@
+# Note: We're committing generated files for easier deployment
+# Uncomment below to gitignore generated code:
+# gen/
+# *.pb.go
+

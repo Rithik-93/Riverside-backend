@@ -8,6 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/websocket v1.5.0
+	github.com/lakeside/backend/protos v0.0.0
 	github.com/pion/webrtc/v3 v3.2.40
 	github.com/redis/go-redis/v9 v9.0.5
 )
@@ -59,6 +60,8 @@ require (
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	google.golang.org/protobuf v1.36.6
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/lakeside/backend/protos => ../../protos

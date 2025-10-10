@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package lakeside.events;
+
+option go_package = "github.com/lakeside/backend/protos/gen/events;events";
+
+// RedisEvent is the main event structure used for Redis queue communication
+// between services (upload-service -> video-processor, signaling-server -> session-service)
+message RedisEvent {
+  string event_type = 1;
+  string user_id = 2;
+  string client_id = 3;
+  string podcast_id = 4;
+  string room_id = 5;
+  int64 timestamp = 6;
+  
+  // Event-specific data - use oneof for type safety
+  oneof data {
+    RecordingCompleteData recording_complete = 10;
+    ClientConnectionData client_connection = 11;
+    PodcastEventData podcast_event = 12;
+    CallEventData call_event = 13;
+    RecordingEventData recording_event = 14;
+  }
+}
+
+// RecordingCompleteData - sent when upload-service finishes recording
+message RecordingCompleteData {
+  string session_id = 1;
+  string recording_id = 2;
+  string podcast_id = 3;
+  int32 total_chunks = 4;
+  string s3_bucket = 5;
+  string s3_region = 6;
+  string s3_endpoint = 7;
+  int64 start_time = 8;
+  int64 end_time = 9;
+  double duration = 10;
+  string output_path = 11;
+  string content_type = 12;
+  string chunk_folder = 13;
+}
+
+// ClientConnectionData - client connect/disconnect events
+message ClientConnectionData {
+  string connection_id = 1;
+  string user_agent = 2;
+  string ip_address = 3;
+}
+
+// PodcastEventData - podcast join/leave events
+message PodcastEventData {
+  string podcast_id = 1;
+  string user_id = 2;
+  int32 participant_count = 3;
+}
+
+// CallEventData - call start/end events
+message CallEventData {
+  string call_id = 1;
+  string from_user_id = 2;
+  string to_user_id = 3;
+}
+
+// RecordingEventData - recording start/stop events
+message RecordingEventData {
+  string recording_id = 1;
+  string podcast_id = 2;
+  string host_user_id = 3;
+  bool is_recording = 4;
+}
+
+// Event type constants (for reference)
+// client_connected, client_disconnected
+// podcast_joined, podcast_left
+// call_started, call_ended
+// recording_started, recording_stopped
+// recording_complete
+

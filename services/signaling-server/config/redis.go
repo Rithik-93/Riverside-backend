@@ -8,6 +8,8 @@ import (
 
 	"github.com/lakeside/services/signaling-server/types"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/proto"
+	eventspb "github.com/lakeside/backend/protos/gen/events"
 )
 
 type RedisClient struct {
@@ -41,9 +43,17 @@ func (r *RedisClient) QueueEvent(event *types.RedisEvent) {
 
 	event.Timestamp = time.Now().Unix()
 
-	data, err := json.Marshal(event)
+	protoEvent := &eventspb.RedisEvent{
+		EventType: event.EventType,
+		UserId:    event.UserID,
+		ClientId:  event.ClientID,
+		PodcastId: event.PodcastID,
+		Timestamp: event.Timestamp,
+	}
+
+	data, err := proto.Marshal(protoEvent)
 	if err != nil {
-		log.Printf("Failed to marshal Redis event: %v", err)
+		log.Printf("Failed to marshal protobuf event: %v", err)
 		return
 	}
 

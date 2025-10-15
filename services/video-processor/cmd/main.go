@@ -4,12 +4,13 @@ import (
 	"log"
 	"time"
 
-	"github.com/joho/godotenv"
-	eventspb "github.com/lakeside/backend/protos/gen/events"
-	"google.golang.org/protobuf/proto"
 	"video-processor/internal/infrastructure"
 	"video-processor/internal/service"
 	"video-processor/pkg/types"
+
+	"github.com/joho/godotenv"
+	eventspb "github.com/lakeside/backend/protos/gen/events"
+	"google.golang.org/protobuf/proto"
 )
 
 func main() {

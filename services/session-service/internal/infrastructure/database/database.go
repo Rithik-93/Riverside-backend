@@ -1,10 +1,14 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
 
+	"github.com/golang-migrate/migrate/v4"
+	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/lakeside/services/session-service/internal/domain"
 	"github.com/lakeside/services/session-service/internal/infrastructure"
 	"gorm.io/driver/postgres"
@@ -34,8 +38,9 @@ func Connect() *gorm.DB {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	if shouldMigrate(db) {
-		log.Println("Running database migrations...")
+	env := os.Getenv("ENV")
+	if env == "development" {
+		log.Println("Running AutoMigrate (development mode)...")
 		err = db.AutoMigrate(
 			&domain.User{}, 
 			&domain.Session{},
@@ -47,30 +52,35 @@ func Connect() *gorm.DB {
 		}
 		log.Println("Database migrations completed successfully")
 	} else {
-		log.Println("Database tables already exist, skipping migration")
+		runMigrations(dsn)
 	}
 
 	log.Println("Database connected successfully")
 	return db
 }
 
-func shouldMigrate(db *gorm.DB) bool {
-	// Check if users table exists (our main table)
-	if !db.Migrator().HasTable(&domain.User{}) {
-		return true
+func runMigrations(dsn string) {
+	sqlDB, err := sql.Open("postgres", dsn)
+	if err != nil {
+		log.Fatal("Failed to open database for migrations:", err)
 	}
-	
-	if !db.Migrator().HasTable(&domain.Session{}) {
-		return true
+	defer sqlDB.Close()
+
+	driver, err := migratepostgres.WithInstance(sqlDB, &migratepostgres.Config{})
+	if err != nil {
+		log.Fatal("Failed to create migration driver:", err)
 	}
-	
-	if !db.Migrator().HasTable(&infrastructure.Pod{}) {
-		return true
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://migrations",
+		"postgres", driver)
+	if err != nil {
+		log.Fatal("Failed to create migrate instance:", err)
 	}
-	
-	if !db.Migrator().HasTable(&infrastructure.PodParticipant{}) {
-		return true
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		log.Fatal("Failed to run migrations:", err)
 	}
-	
-	return false
+
+	log.Println("Production migrations completed successfully")
 }

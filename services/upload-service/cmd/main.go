@@ -20,6 +20,13 @@ import (
 )
 
 func initS3() (*s3.Client, string) {
+	// Check for required AWS credentials
+	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	if len(accessKey) == 0 || len(secretKey) == 0 {
+		log.Fatal("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required")
+	}
+
 	region := os.Getenv("AWS_REGION")
 	if region == "" {
 		region = "us-east-1"

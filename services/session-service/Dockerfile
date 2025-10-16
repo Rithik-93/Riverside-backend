@@ -29,12 +29,14 @@ COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /etc/group /etc/group
 
-COPY --from=builder /build/session-service /session-service
+COPY --from=builder /build/session-service /app/session-service
+COPY --from=builder /build/migrations /app/migrations
 
 ENV TZ=UTC
 
+WORKDIR /app
 USER 1000:1000
 
 EXPOSE 8081
 
-ENTRYPOINT ["/session-service"]
+ENTRYPOINT ["/app/session-service"]

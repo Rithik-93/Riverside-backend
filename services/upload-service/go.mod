@@ -1,6 +1,6 @@
 module github.com/lakeside/services/upload-service
 
-go 1.24.4
+go 1.23.0
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.39.0

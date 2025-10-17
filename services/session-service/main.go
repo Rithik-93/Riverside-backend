@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lakeside/services/session-service/internal/auth"
@@ -49,8 +50,15 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
 
-	accessSecret := "secret"
-	refreshSecret := "secret"
+	accessSecret := os.Getenv("JWT_ACCESS_SECRET")
+	if accessSecret == "" {
+		log.Fatal("JWT_ACCESS_SECRET environment variable is required")
+	}
+	
+	refreshSecret := os.Getenv("JWT_REFRESH_SECRET")
+	if refreshSecret == "" {
+		log.Fatal("JWT_REFRESH_SECRET environment variable is required")
+	}
 
 	tokenService := service.NewTokenService(
 		accessSecret,
@@ -74,21 +82,34 @@ func main() {
 		log.Println("Redis consumer started")
 	}
 
-	router := gin.Default()
+    router := gin.Default()
 
-	router.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		c.Header("Access-Control-Allow-Credentials", "true")
-		
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-		
-		c.Next()
-	})
+    allowedOriginsEnv := os.Getenv("CORS_ALLOWED_ORIGINS")
+    if allowedOriginsEnv == "" {
+        log.Fatal("CORS_ALLOWED_ORIGINS environment variable is required")
+    }
+    allowedOrigins := map[string]struct{}{}
+    for _, v := range strings.Split(allowedOriginsEnv, ",") {
+        origin := strings.TrimSpace(v)
+        if origin != "" {
+            allowedOrigins[origin] = struct{}{}
+        }
+    }
+
+    router.Use(func(c *gin.Context) {
+        origin := c.Request.Header.Get("Origin")
+        if _, ok := allowedOrigins[origin]; ok {
+            c.Header("Access-Control-Allow-Origin", origin)
+        }
+        c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie")
+        c.Header("Access-Control-Allow-Credentials", "true")
+        if c.Request.Method == "OPTIONS" {
+            c.AbortWithStatus(204)
+            return
+        }
+        c.Next()
+    })
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "OK"})

@@ -19,7 +19,10 @@ const (
 func NewAuth() {
 	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
 	googleClientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
-	backendURL := "http://localhost:8081"
+	backendURL := os.Getenv("BACKEND_URL")
+	if backendURL == "" {
+		backendURL = "http://localhost:8081"
+	}
 	googleCallbackURL := backendURL + "/auth/google/callback"
 
 	store := sessions.NewCookieStore([]byte(key))

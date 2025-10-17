@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -32,15 +33,33 @@ func AuthController(c *gin.Context) {
 	db := database.Connect()
 	userRepo := repository.NewUserRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
-	tokenService := service.NewTokenService("secret", "secret")
+	
+	accessSecret := os.Getenv("JWT_ACCESS_SECRET")
+	if accessSecret == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "JWT_ACCESS_SECRET not configured"})
+		return
+	}
+	
+	refreshSecret := os.Getenv("JWT_REFRESH_SECRET")
+	if refreshSecret == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "JWT_REFRESH_SECRET not configured"})
+		return
+	}
+	
+	tokenService := service.NewTokenService(accessSecret, refreshSecret)
 
 	username := strings.Split(gothUser.Email, "@")[0]
 
 	existingUser, err := userRepo.GetByEmail(gothUser.Email)
 	if err != nil {
-		newUser, err := domain.NewUser(gothUser.Email, username, gothUser.Name, "")
+		fullName := gothUser.Name
+		if fullName == "" {
+			fullName = username
+		}
+		
+		newUser, err := domain.NewUser(gothUser.Email, username, fullName, "")
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user: " + err.Error()})
 			return
 		}
 
@@ -51,8 +70,9 @@ func AuthController(c *gin.Context) {
 		}
 		existingUser = newUser
 	} else {
-		// User exists, update their info
-		existingUser.FullName = gothUser.Name
+		if gothUser.Name != "" {
+			existingUser.FullName = gothUser.Name
+		}
 		existingUser.Username = username
 		err = userRepo.Update(existingUser)
 		if err != nil {
@@ -74,11 +94,23 @@ func AuthController(c *gin.Context) {
 		return
 	}
 
-	// Set cookies
-	c.SetCookie("access_token", accessToken, 24*60*60, "/", "", false, true)
-	c.SetCookie("refresh_token", refreshToken, 7*24*60*60, "/", "", false, true)
+	cookieDomain := os.Getenv("COOKIE_DOMAIN")
+	secure := os.Getenv("COOKIE_SECURE") == "true"
 
-	// Redirect to frontend
-	frontendURL := "http://localhost:5173/dashboard/home"
+	c.SetCookie("access_token", "", -1, "/", "", secure, true)
+	c.SetCookie("refresh_token", "", -1, "/", "", secure, true)
+	
+	if cookieDomain != "" {
+		c.SetCookie("access_token", "", -1, "/", cookieDomain, secure, true)
+		c.SetCookie("refresh_token", "", -1, "/", cookieDomain, secure, true)
+	}
+	
+	c.SetCookie("access_token", accessToken, 24*60*60, "/", cookieDomain, secure, true)
+	c.SetCookie("refresh_token", refreshToken, 7*24*60*60, "/", cookieDomain, secure, true)
+
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:5173/dashboard/home"
+	}
 	c.Redirect(http.StatusFound, frontendURL)
 }

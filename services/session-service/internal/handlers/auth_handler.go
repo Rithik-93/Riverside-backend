@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lakeside/services/session-service/internal/domain"
@@ -62,8 +63,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("access_token", authResponse.AccessToken, 24*60*60, "/", "", false, true)  // 24 hours, HTTP-only
-	c.SetCookie("refresh_token", authResponse.RefreshToken, 7*24*60*60, "/", "", false, true)  // 7 days, HTTP-only
+	cookieDomain := os.Getenv("COOKIE_DOMAIN")
+	secure := os.Getenv("COOKIE_SECURE") == "true"
+	
+	c.SetCookie("access_token", authResponse.AccessToken, 24*60*60, "/", cookieDomain, secure, true)  // 24 hours, HTTP-only
+	c.SetCookie("refresh_token", authResponse.RefreshToken, 7*24*60*60, "/", cookieDomain, secure, true)  // 7 days, HTTP-only
 
 	c.JSON(http.StatusOK, types.SuccessResponse(authResponse, "Login successful"))
 }
@@ -81,8 +85,11 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("access_token", authResponse.AccessToken, 24*60*60, "/", "", false, true)  // 24 hours, HTTP-only
-	c.SetCookie("refresh_token", authResponse.RefreshToken, 7*24*60*60, "/", "", false, true)  // 7 days, HTTP-only
+	cookieDomain := os.Getenv("COOKIE_DOMAIN")
+	secure := os.Getenv("COOKIE_SECURE") == "true"
+	
+	c.SetCookie("access_token", authResponse.AccessToken, 24*60*60, "/", cookieDomain, secure, true)  // 24 hours, HTTP-only
+	c.SetCookie("refresh_token", authResponse.RefreshToken, 7*24*60*60, "/", cookieDomain, secure, true)  // 7 days, HTTP-only
 
 	c.JSON(http.StatusOK, types.SuccessResponse(authResponse, "Token refreshed successfully"))
 }
@@ -100,8 +107,11 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("access_token", "", -1, "/", "", false, true)
-	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
+	cookieDomain := os.Getenv("COOKIE_DOMAIN")
+	secure := os.Getenv("COOKIE_SECURE") == "true"
+	
+	c.SetCookie("access_token", "", -1, "/", cookieDomain, secure, true)
+	c.SetCookie("refresh_token", "", -1, "/", cookieDomain, secure, true)
 
 	c.JSON(http.StatusOK, types.SuccessResponse(nil, "Logout successful"))
 }

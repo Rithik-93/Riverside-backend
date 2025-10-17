@@ -21,7 +21,7 @@ func NewTokenService(accessSecret, refreshSecret string) *TokenService {
 	return &TokenService{
 		accessTokenSecret:  accessSecret,
 		refreshTokenSecret: refreshSecret,
-		accessTokenExpiry:  2 * time.Minute,
+		accessTokenExpiry:  24 * time.Hour,
 		refreshTokenExpiry: 7 * 24 * time.Hour,
 	}
 }

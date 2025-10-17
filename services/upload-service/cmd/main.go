@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -101,7 +102,10 @@ func main() {
 		log.Println("No .env file found, using system environment variables")
 	}
 
-	jwtSecret := "secret"
+	jwtSecret := os.Getenv("JWT_ACCESS_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_ACCESS_SECRET environment variable is required")
+	}
 	middleware.SetJWTSecret(jwtSecret)
 
 	s3Client, bucket := initS3()
@@ -111,18 +115,34 @@ func main() {
 	sessionManager := service.NewSessionManager(redisClient, bucket)
 	uploadHandler := handlers.NewUploadHandler(s3Client, bucket, redisClient, sessionManager)
 
-	r := gin.Default()
+    r := gin.Default()
 
-	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173")
-		c.Header("Access-Control-Allow-Credentials", "true")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-		}
-		c.Next()
-	})
+    allowedOriginsEnv := os.Getenv("CORS_ALLOWED_ORIGINS")
+    if allowedOriginsEnv == "" {
+        log.Fatal("CORS_ALLOWED_ORIGINS environment variable is required")
+    }
+    allowedOrigins := map[string]struct{}{}
+    for _, v := range strings.Split(allowedOriginsEnv, ",") {
+        origin := strings.TrimSpace(v)
+        if origin != "" {
+            allowedOrigins[origin] = struct{}{}
+        }
+    }
+
+    r.Use(func(c *gin.Context) {
+        origin := c.Request.Header.Get("Origin")
+        if _, ok := allowedOrigins[origin]; ok {
+            c.Header("Access-Control-Allow-Origin", origin)
+        }
+        c.Header("Access-Control-Allow-Credentials", "true")
+        c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie")
+        c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        if c.Request.Method == "OPTIONS" {
+            c.AbortWithStatus(204)
+            return
+        }
+        c.Next()
+    })
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})

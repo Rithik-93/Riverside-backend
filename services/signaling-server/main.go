@@ -3,28 +3,29 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/lakeside/services/signaling-server/config"
 	"github.com/lakeside/services/signaling-server/handlers"
 	"github.com/lakeside/services/signaling-server/internal"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: .env file not found or could not be loaded: %v", err)
+	}
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
 		redisAddr = "localhost:6379"
 	}
 
-	// Hardcoded JWT secret for development
-	jwtSecret := "secret"
-	
-	secretLength := 10
-	if len(jwtSecret) < 10 {
-		secretLength = len(jwtSecret)
+	jwtSecret := os.Getenv("JWT_ACCESS_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_ACCESS_SECRET environment variable is required")
 	}
-	log.Printf("Signaling server using JWT secret: %s...", jwtSecret[:secretLength])
 
 	redisClient := config.NewRedisClient(redisAddr, os.Getenv("REDIS_PASSWORD"), 0)
 	tokenService := internal.NewTokenService(jwtSecret)
@@ -32,13 +33,23 @@ func main() {
 
 	router := gin.Default()
 
-	corsConfig := cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Content-Type", "Authorization"},
-		AllowCredentials: true,
-	}
-	router.Use(cors.New(corsConfig))
+    allowedOriginsEnv := os.Getenv("CORS_ALLOWED_ORIGINS")
+    if allowedOriginsEnv == "" {
+        log.Fatal("CORS_ALLOWED_ORIGINS environment variable is required")
+    }
+    var origins []string
+    for _, v := range strings.Split(allowedOriginsEnv, ",") {
+        if o := strings.TrimSpace(v); o != "" {
+            origins = append(origins, o)
+        }
+    }
+    corsConfig := cors.Config{
+        AllowOrigins:     origins,
+        AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+        AllowHeaders:     []string{"Content-Type", "Authorization", "Cookie"},
+        AllowCredentials: true,
+    }
+    router.Use(cors.New(corsConfig))
 
 	router.Use(func(c *gin.Context) {
 		if c.Request.Method == "OPTIONS" {

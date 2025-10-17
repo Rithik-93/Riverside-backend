@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-processor
+  labels:
+    app: video-processor
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: video-processor
+  template:
+    metadata:
+      labels:
+        app: video-processor
+        version: v1
+    spec:
+      containers:
+      - name: video-processor
+        image: rithik933/lakeside-video-processor:v5
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8083
+          protocol: TCP
+        env:
+        - name: REDIS_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: video-processor-config
+              key: REDIS_ADDR
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: video-processor-config
+              key: AWS_REGION
+        - name: S3_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: video-processor-config
+              key: S3_ENDPOINT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: video-processor-secrets
+              key: REDIS_PASSWORD
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: video-processor-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: video-processor-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 1000

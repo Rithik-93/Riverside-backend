@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upload-service
+  labels:
+    app: upload-service
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: upload-service
+  template:
+    metadata:
+      labels:
+        app: upload-service
+        version: v1
+    spec:
+      containers:
+      - name: upload-service
+        image: rithik933/lakeside-upload-service:v5
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8082
+          protocol: TCP
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: upload-service-config
+              key: PORT
+        - name: REDIS_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: upload-service-config
+              key: REDIS_ADDR
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: upload-service-config
+              key: AWS_REGION
+        - name: S3_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: upload-service-config
+              key: S3_ENDPOINT
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: upload-service-config
+              key: S3_BUCKET_NAME
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: upload-service-secrets
+              key: REDIS_PASSWORD
+        - name: CORS_ALLOWED_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: upload-service-config
+              key: CORS_ALLOWED_ORIGINS      
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: upload-service-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: upload-service-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        - name: JWT_ACCESS_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secrets
+              key: JWT_ACCESS_SECRET
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8082
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8082
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 1000

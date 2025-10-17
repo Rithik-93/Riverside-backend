@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: video-processor-config
+  namespace: default
+data:
+  REDIS_ADDR: "redis-service:6379"
+  AWS_REGION: "us-east-1"
+  S3_ENDPOINT: ""

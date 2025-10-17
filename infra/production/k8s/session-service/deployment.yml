@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: session-service
+  labels:
+    app: session-service
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: session-service
+  template:
+    metadata:
+      labels:
+        app: session-service
+        version: v1
+    spec:
+      containers:
+      - name: session-service
+        image: rithik933/lakeside-session-service:v5
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081
+          protocol: TCP
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: session-service-config
+              key: PORT
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: session-service-secrets
+              key: DATABASE_URL
+        - name: REDIS_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: session-service-config
+              key: REDIS_ADDR
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: session-service-secrets
+              key: REDIS_PASSWORD
+        - name: JWT_ACCESS_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: session-service-secrets
+              key: JWT_ACCESS_SECRET
+        - name: JWT_REFRESH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: session-service-secrets
+              key: JWT_REFRESH_SECRET
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: session-service-secrets
+              key: GOOGLE_CLIENT_ID
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: session-service-secrets
+              key: GOOGLE_CLIENT_SECRET
+        - name: BACKEND_URL
+          valueFrom:
+            configMapKeyRef:
+              name: session-service-config
+              key: BACKEND_URL
+        - name: CORS_ALLOWED_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: session-service-config
+              key: CORS_ALLOWED_ORIGINS
+        - name: FRONTEND_URL
+          valueFrom:
+            configMapKeyRef:
+              name: session-service-config
+              key: FRONTEND_URL
+        - name: COOKIE_DOMAIN
+          valueFrom:
+            configMapKeyRef:
+              name: session-service-config
+              key: COOKIE_DOMAIN
+        - name: COOKIE_SECURE
+          valueFrom:
+            configMapKeyRef:
+              name: session-service-config
+              key: COOKIE_SECURE
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 1000
+

@@ -1,0 +1,66 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lakeside-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://lakeside.rithik.xyz,https://lakeside-api.rithik.xyz,https://ws-lakeside.rithik.xyz,https://lakeside-upload.rithik.xyz"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  labels:
+    app: lakeside
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - lakeside.rithik.xyz
+        - lakeside-api.rithik.xyz
+        - ws-lakeside.rithik.xyz
+        - lakeside-upload.rithik.xyz
+      secretName: lakeside-tls
+  rules:
+    - host: lakeside.rithik.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    - host: lakeside-api.rithik.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: session-service
+                port:
+                  number: 80
+    - host: ws-lakeside.rithik.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: signaling-server
+                port:
+                  number: 80
+    - host: lakeside-upload.rithik.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: upload-service
+                port:
+                  number: 80

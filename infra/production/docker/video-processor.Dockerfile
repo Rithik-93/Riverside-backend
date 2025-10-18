@@ -1,21 +1,29 @@
 # =============================================================================
 # Build Stage
 # =============================================================================
-FROM golang:1.24.4-alpine AS builder
+FROM golang:1.23.0-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates tzdata
 
-WORKDIR /build
+WORKDIR /build/services/video-processor
 
-COPY go.mod go.sum ./
+COPY backend/protos /build/protos
+
+COPY backend/services/video-processor/. .
+
 RUN go mod download && go mod verify
 
-COPY . .
+ARG VERSION=dev
+ARG BUILD_TIME
+
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s -X main.version=${VERSION:-dev} -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    -ldflags="-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME}" \
     -trimpath \
-    -o session-service \
-    main.go
+    -o video-processor \
+    ./cmd/main.go
+
+RUN echo "appuser:x:1000:1000:appuser:/:/sbin/nologin" > /etc/passwd.minimal && \
+    echo "appuser:x:1000:" > /etc/group.minimal
 
 # =============================================================================
 # Final Stage
@@ -23,20 +31,14 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-
-COPY --from=builder /etc/passwd /etc/passwd
-COPY --from=builder /etc/group /etc/group
-
-COPY --from=builder /build/session-service /app/session-service
-COPY --from=builder /build/migrations /app/migrations
+COPY --from=builder /etc/passwd.minimal /etc/passwd
+COPY --from=builder /etc/group.minimal /etc/group
+COPY --from=builder /build/services/video-processor/video-processor /video-processor
 
 ENV TZ=UTC
 
-WORKDIR /app
 USER 1000:1000
 
-EXPOSE 8081
+ENTRYPOINT ["/video-processor"]
 
-ENTRYPOINT ["/app/session-service"]

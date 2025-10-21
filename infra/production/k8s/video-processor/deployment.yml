@@ -39,6 +39,11 @@ spec:
             configMapKeyRef:
               name: video-processor-config
               key: S3_ENDPOINT
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: video-processor-config
+              key: S3_BUCKET_NAME
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -66,10 +71,16 @@ spec:
           runAsUser: 1000
           runAsGroup: 1000
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
+          readOnlyRootFilesystem: false
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - name: tmp-dir
+          mountPath: /tmp
       restartPolicy: Always
       securityContext:
         fsGroup: 1000
+      volumes:
+      - name: tmp-dir
+        emptyDir: {}

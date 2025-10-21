@@ -5,5 +5,6 @@ metadata:
   namespace: default
 data:
   REDIS_ADDR: "redis-service:6379"
-  AWS_REGION: "us-east-1"
-  S3_ENDPOINT: ""
+  AWS_REGION: "blr1"
+  S3_ENDPOINT: "https://blr1.digitaloceanspaces.com"
+  S3_BUCKET_NAME: "rithik-riverside"

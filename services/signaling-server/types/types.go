@@ -17,6 +17,7 @@ type Client struct {
 	RecordingID   string                     `json:"recordingId,omitempty"`
 	UserSessionID string                     `json:"userSessionId,omitempty"`
 	IsInCall      bool                       `json:"isInCall"`
+	IsReady       bool                       `json:"isReady"`
 	RemoteDesc    *webrtc.SessionDescription `json:"-"`
 	ConnectedAt   time.Time                  `json:"connectedAt"`
 	LastPing      time.Time                  `json:"lastPing"`
@@ -32,6 +33,7 @@ type Podcast struct {
 	HostUserID   string             `json:"hostUserId,omitempty"`
 	IsRecording  bool               `json:"isRecording"`
 	RecordingID  string             `json:"recordingId,omitempty"`
+	ReadyClients map[string]bool    `json:"readyClients"`
 }
 
 type Message struct {
@@ -82,6 +84,8 @@ const (
 	MessageTypePodcastJoined = "podcast-joined"
 	MessageTypeUserJoined   = "user-joined"
 	MessageTypeUserLeft     = "user-left"
+	MessageTypeReady        = "ready"
+	MessageTypeBothReady    = "both-ready"
 	MessageTypeOffer        = "offer"
 	MessageTypeAnswer       = "answer"
 	MessageTypeICECandidate = "ice-candidate"

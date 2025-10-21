@@ -89,6 +89,8 @@ func (s *SignalingServer) handleMessage(client *types.Client, msg *types.Message
 		s.handleJoinPodcast(client, msg)
 	case types.MessageTypeLeavePodcast:
 		s.handleLeavePodcast(client)
+	case types.MessageTypeReady:
+		s.handleReady(client, msg)
 	case types.MessageTypeOffer:
 		s.handleOffer(client, msg)
 	case types.MessageTypeAnswer:
@@ -132,12 +134,13 @@ func (s *SignalingServer) handleJoinPodcast(client *types.Client, msg *types.Mes
 	podcast, exists := s.podcasts[podcastID]
 	if !exists {
 		podcast = &types.Podcast{
-			ID:          podcastID,
-			Clients:     make(map[string]*types.Client),
-			CreatedAt:   time.Now(),
-			MaxClients:  10,
-			HostUserID:  client.UserID,
-			IsRecording: false,
+			ID:           podcastID,
+			Clients:      make(map[string]*types.Client),
+			CreatedAt:    time.Now(),
+			MaxClients:   10,
+			HostUserID:   client.UserID,
+			IsRecording:  false,
+			ReadyClients: make(map[string]bool),
 		}
 		s.podcasts[podcastID] = podcast
 		
@@ -223,7 +226,9 @@ func (s *SignalingServer) leavePodcastInternal(client *types.Client) {
 
 	podcastID := client.PodcastID
 	delete(podcast.Clients, client.ID)
+	delete(podcast.ReadyClients, client.ID) // Clear ready state
 	client.PodcastID = ""
+	client.IsReady = false // Reset ready flag
 
 	s.redisClient.QueuePodcastLeft(client.ID, client.UserID, podcastID)
 
@@ -247,6 +252,71 @@ func (s *SignalingServer) leavePodcastInternal(client *types.Client) {
 	}
 
 	log.Printf("Client %s left podcast %s", client.ID, podcastID)
+}
+
+func (s *SignalingServer) handleReady(client *types.Client, msg *types.Message) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if client.PodcastID == "" {
+		log.Printf("Client %s not in a podcast, ignoring ready message", client.ID)
+		return
+	}
+
+	podcast, exists := s.podcasts[client.PodcastID]
+	if !exists {
+		log.Printf("Podcast %s not found for ready message", client.PodcastID)
+		return
+	}
+
+	// Mark this client as ready
+	client.IsReady = true
+	podcast.ReadyClients[client.ID] = true
+	log.Printf("Client %s marked as ready in podcast %s (ready: %d/%d)", 
+		client.ID, client.PodcastID, len(podcast.ReadyClients), len(podcast.Clients))
+
+	// Check if exactly 2 clients and both are ready
+	if len(podcast.Clients) == 2 && len(podcast.ReadyClients) == 2 {
+		log.Printf("Both clients ready in podcast %s, broadcasting both-ready message", client.PodcastID)
+		
+		// Get sorted client IDs to determine who should initiate
+		var clientIDs []string
+		for id := range podcast.Clients {
+			clientIDs = append(clientIDs, id)
+		}
+		
+		// Sort to determine initiator (lexicographically first)
+		var initiatorID, responderID string
+		if clientIDs[0] < clientIDs[1] {
+			initiatorID = clientIDs[0]
+			responderID = clientIDs[1]
+		} else {
+			initiatorID = clientIDs[1]
+			responderID = clientIDs[0]
+		}
+
+		// Send both-ready message to all clients with role information
+		for id, podcastClient := range podcast.Clients {
+			shouldInitiate := (id == initiatorID)
+			targetID := responderID
+			if id == responderID {
+				targetID = initiatorID
+			}
+
+			bothReadyMsg := &types.Message{
+				Type:      types.MessageTypeBothReady,
+				PodcastID: client.PodcastID,
+				Payload: map[string]interface{}{
+					"shouldInitiate": shouldInitiate,
+					"targetUserId":   targetID,
+				},
+				Timestamp: time.Now().Unix(),
+			}
+			podcastClient.Conn.WriteJSON(bothReadyMsg)
+			log.Printf("Sent both-ready to client %s (shouldInitiate: %v, target: %s)", 
+				id, shouldInitiate, targetID)
+		}
+	}
 }
 
 func (s *SignalingServer) handleOffer(client *types.Client, msg *types.Message) {

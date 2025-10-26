@@ -49,6 +49,7 @@ func main() {
 
 	userRepo := repository.NewUserRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
+	podcastRepo := repository.NewPodcastRepository(db)
 
 	accessSecret := os.Getenv("JWT_ACCESS_SECRET")
 	if accessSecret == "" {
@@ -75,6 +76,7 @@ func main() {
 	authService := domain.NewAuthService(userRepo, sessionRepo, tokenService, nil, redisSessionService)
 	
 	authHandler := handlers.NewAuthHandler(authService)
+	podcastHandler := handlers.NewPodcastHandler(podcastRepo, redisSessionService)
 
 	redisConsumer := infrastructure.NewRedisConsumer(db)
 	if redisConsumer != nil {
@@ -131,6 +133,13 @@ func main() {
 	{
 		sessions.GET("/:sessionId", authHandler.ValidateSession)
 		sessions.DELETE("/:sessionId", authHandler.DeleteSession)
+	}
+
+	podcasts := router.Group("/podcasts")
+	podcasts.Use(authMiddleware(tokenService))
+	{
+		podcasts.POST("/create", podcastHandler.CreatePodcast)
+		podcasts.GET("/check/:podcastId", podcastHandler.CheckPodcast)
 	}
 
 	port := os.Getenv("PORT")

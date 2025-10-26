@@ -424,5 +424,24 @@ func (r *RedisSessionService) UpdateParticipantChunkCount(recordingID, userID st
 	return r.UpdateRecordingSession(recordingID, recordingData)
 }
 
+func (r *RedisSessionService) SetPodcastHost(podcastID, hostUserID string) error {
+	ctx := context.Background()
+	key := "podcast_host:" + podcastID
+	return r.client.Set(ctx, key, hostUserID, 24*time.Hour).Err()
+}
+
+func (r *RedisSessionService) GetPodcastHost(podcastID string) (string, error) {
+	ctx := context.Background()
+	key := "podcast_host:" + podcastID
+	result, err := r.client.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return "", nil
+		}
+		return "", err
+	}
+	return result, nil
+}
+
 
 

@@ -79,11 +79,6 @@ func (h *UploadHandler) GetPreSignedURL(c *gin.Context) {
 		Bucket:            aws.String(h.bucket),
 		Key:               aws.String(s3Key),
 		ContentType:       aws.String(req.ContentType),
-		ChecksumAlgorithm: "SHA256",
-	}
-
-	if req.FileSize > 0 {
-		putObjectInput.ContentLength = aws.Int64(req.FileSize)
 	}
 
 	expirationTime := 3 * time.Minute

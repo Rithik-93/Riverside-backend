@@ -61,6 +61,13 @@ func main() {
 		log.Fatal("JWT_REFRESH_SECRET environment variable is required")
 	}
 
+	if os.Getenv("CLOUDFLARE_TURN_TOKEN_ID") == "" {
+		log.Fatal("CLOUDFLARE_TURN_TOKEN_ID environment variable is required")
+	}
+	if os.Getenv("CLOUDFLARE_API_TOKEN") == "" {
+		log.Fatal("CLOUDFLARE_API_TOKEN environment variable is required")
+	}
+
 	tokenService := service.NewTokenService(
 		accessSecret,
 		refreshSecret,
@@ -77,6 +84,7 @@ func main() {
 	
 	authHandler := handlers.NewAuthHandler(authService)
 	podcastHandler := handlers.NewPodcastHandler(podcastRepo, redisSessionService)
+	turnHandler := handlers.NewTurnHandler()
 
 	redisConsumer := infrastructure.NewRedisConsumer(db)
 	if redisConsumer != nil {
@@ -140,6 +148,12 @@ func main() {
 	{
 		podcasts.POST("/create", podcastHandler.CreatePodcast)
 		podcasts.GET("/check/:podcastId", podcastHandler.CheckPodcast)
+	}
+
+	turnGroup := router.Group("/turn")
+	turnGroup.Use(authMiddleware(tokenService))
+	{
+		turnGroup.GET("/credentials", turnHandler.GetTurnCredentials)
 	}
 
 	port := os.Getenv("PORT")

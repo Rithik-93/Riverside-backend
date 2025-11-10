@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: video-processor
-        image: rithik933/lakeside-video-processor:v5
+        image: rithik933/lakeside-video-processor:v10
         imagePullPolicy: Always
         ports:
         - containerPort: 8083

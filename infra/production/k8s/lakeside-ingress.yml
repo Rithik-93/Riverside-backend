@@ -1,19 +1,22 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: lakeside-ingress
+  name: unified-ingress
   namespace: default
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "https://lakeside.rithik.xyz,https://lakeside-api.rithik.xyz,https://ws-lakeside.rithik.xyz,https://lakeside-upload.rithik.xyz"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://lakeside.rithik.xyz,https://lakeside-api.rithik.xyz,https://ws-lakeside.rithik.xyz,https://lakeside-upload.rithik.xyz,https://superchess.rithik.xyz,https://superchess-api.rithik.xyz,https://superchess-ws.rithik.xyz"
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization"
     nginx.ingress.kubernetes.io/enable-cors: "true"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/websocket-services: "signaling-server,game-arena"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
   labels:
-    app: lakeside
+    app: unified-ingress
 spec:
   ingressClassName: nginx
   tls:
@@ -22,7 +25,10 @@ spec:
         - lakeside-api.rithik.xyz
         - ws-lakeside.rithik.xyz
         - lakeside-upload.rithik.xyz
-      secretName: lakeside-tls
+        - superchess.rithik.xyz
+        - superchess-api.rithik.xyz
+        - superchess-ws.rithik.xyz
+      secretName: unified-tls
   rules:
     - host: lakeside.rithik.xyz
       http:
@@ -31,7 +37,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: frontend
+                name: lakeside-frontend
                 port:
                   number: 80
     - host: lakeside-api.rithik.xyz
@@ -62,5 +68,35 @@ spec:
             backend:
               service:
                 name: upload-service
+                port:
+                  number: 80
+    - host: superchess.rithik.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: superchess-frontend
+                port:
+                  number: 80
+    - host: superchess-api.rithik.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 80
+    - host: superchess-ws.rithik.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: game-arena
                 port:
                   number: 80

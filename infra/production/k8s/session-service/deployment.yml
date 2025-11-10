@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: session-service
-        image: rithik933/lakeside-session-service:v5
+        image: rithik933/lakeside-session-service:v10
         imagePullPolicy: Always
         ports:
         - containerPort: 8081
@@ -89,6 +89,21 @@ spec:
             configMapKeyRef:
               name: session-service-config
               key: COOKIE_SECURE
+        - name: CLOUDFLARE_TURN_TOKEN_ID
+          valueFrom:
+            secretKeyRef:
+              name: session-service-secrets
+              key: CLOUDFLARE_TURN_TOKEN_ID
+        - name: CLOUDFLARE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: session-service-secrets
+              key: CLOUDFLARE_API_TOKEN
+        - name: CLOUDFLARE_ACCOUNT_ID
+          valueFrom:
+            secretKeyRef:
+              name: session-service-secrets
+              key: CLOUDFLARE_ACCOUNT_ID
         
         livenessProbe:
           httpGet:

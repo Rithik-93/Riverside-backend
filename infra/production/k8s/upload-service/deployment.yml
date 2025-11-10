@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: upload-service
-        image: rithik933/lakeside-upload-service:v5
+        image: rithik933/lakeside-upload-service:v10
         imagePullPolicy: Always
         ports:
         - containerPort: 8082

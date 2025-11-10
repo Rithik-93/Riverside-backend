@@ -1,28 +1,35 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
+  name: lakeside-frontend
   labels:
-    app: frontend
+    app: lakeside-frontend
     version: v1
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: frontend
+      app: lakeside-frontend
   template:
     metadata:
       labels:
-        app: frontend
+        app: lakeside-frontend
         version: v1
     spec:
       containers:
       - name: frontend
-        image: rithik933/lakeside-frontend:v9
+        image: rithik933/lakeside-frontend:v10
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
           protocol: TCP
+        env:
+        - name: VITE_API_URL
+          value: "https://lakeside-api.rithik.xyz"
+        - name: VITE_WS_URL
+          value: "wss://ws-lakeside.rithik.xyz/ws"
+        - name: VITE_UPLOAD_URL
+          value: "https://lakeside-upload.rithik.xyz"
         volumeMounts:
         - name: nginx-cache
           mountPath: /var/cache/nginx

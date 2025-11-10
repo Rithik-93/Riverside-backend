@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -31,14 +32,36 @@ func Connect() *gorm.DB {
 		)
 	}
 
+	/*
+	Configure GORM logger based on environment
+	In development: log all queries (Info level) for debugging
+	*/
+	env := os.Getenv("ENV")
+	var gormLogger logger.Interface
+	
+	if env == "development" {
+		gormLogger = logger.Default.LogMode(logger.Info)
+	} else {
+		gormLogger = logger.New(
+			log.New(os.Stdout, "\r\n", log.LstdFlags),
+			logger.Config{
+				SlowThreshold:             time.Second,
+				LogLevel:                  logger.Error,
+				IgnoreRecordNotFoundError: true,
+				Colorful:                  false,
+			},
+		)
+	}
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger:                 gormLogger,
+		PrepareStmt:            true,
+		SkipDefaultTransaction: false,
 	})
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	env := os.Getenv("ENV")
 	if env == "development" {
 		log.Println("Running AutoMigrate (development mode)...")
 		err = db.AutoMigrate(

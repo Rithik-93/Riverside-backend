@@ -6,22 +6,26 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
 	"video-processor/internal/infrastructure"
 	"video-processor/pkg/types"
+	"gorm.io/gorm"
 )
 
 type VideoProcessor struct {
 	s3Client            *infrastructure.S3Client
+	db                  *gorm.DB
 	processedRecordings map[string]bool
 	mutex               sync.RWMutex
 }
 
-func NewVideoProcessor(s3Client *infrastructure.S3Client) *VideoProcessor {
+func NewVideoProcessor(s3Client *infrastructure.S3Client, db *gorm.DB) *VideoProcessor {
 	return &VideoProcessor{
 		s3Client:            s3Client,
+		db:                  db,
 		processedRecordings: make(map[string]bool),
 	}
 }
@@ -122,11 +126,71 @@ func (vp *VideoProcessor) concatenateVideoChunks(data *types.RecordingCompleteDa
 
 	log.Printf("📤 Uploaded final video to: %s", data.OutputPath)
 
-	// Optionally clean up individual chunks from S3
+	if err := vp.saveRecordingToDB(data, userID); err != nil {
+		log.Printf("Failed to save recording to database: %v", err)
+	}
+
 	if os.Getenv("CLEANUP_CHUNKS") == "true" {
 		go vp.s3Client.CleanupChunks(data.S3Bucket, s3Keys)
 	}
 
+	return nil
+}
+
+func (vp *VideoProcessor) saveRecordingToDB(data *types.RecordingCompleteData, userID string) error {
+	if vp.db == nil {
+		return fmt.Errorf("database connection not available")
+	}
+
+	podID, err := strconv.ParseUint(data.PodcastID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("failed to parse podcast_id to pod_id: %v", err)
+	}
+
+	var s3URL string
+	if data.S3Endpoint != "" {
+		s3URL = fmt.Sprintf("%s/%s/%s", data.S3Endpoint, data.S3Bucket, data.OutputPath)
+	} else {
+		s3URL = fmt.Sprintf("s3://%s/%s", data.S3Bucket, data.OutputPath)
+	}
+
+	durationMs := int64(data.Duration * 1000)
+	startedAt := time.Unix(data.StartTime, 0)
+	endedAt := time.Unix(data.EndTime, 0)
+
+	var recording infrastructure.Recording
+	err = vp.db.Where("recording_id = ?", data.RecordingID).FirstOrCreate(&recording, infrastructure.Recording{
+		PodID:       podID,
+		RecordingID: data.RecordingID,
+		State:       "started",
+		StartedAt:   startedAt,
+	}).Error
+	if err != nil {
+		return fmt.Errorf("failed to get or create recording: %v", err)
+	}
+
+	recording.S3URL = &s3URL
+	recording.DurationMs = &durationMs
+	recording.State = "completed"
+	recording.EndedAt = &endedAt
+	if err := vp.db.Save(&recording).Error; err != nil {
+		return fmt.Errorf("failed to update recording: %v", err)
+	}
+
+	userLink := infrastructure.UserRecordingLink{
+		UserID:      userID,
+		RecordingID: data.RecordingID,
+		S3URL:       s3URL,
+	}
+	
+	err = vp.db.Where("user_id = ? AND recording_id = ?", userID, data.RecordingID).
+		Assign(userLink).
+		FirstOrCreate(&userLink).Error
+	if err != nil {
+		return fmt.Errorf("failed to save user recording link: %v", err)
+	}
+
+	log.Printf("Saved recording to database: RecordingID=%s, UserID=%s, S3URL=%s", data.RecordingID, userID, s3URL)
 	return nil
 }
 

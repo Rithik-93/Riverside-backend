@@ -10,6 +10,8 @@ type RedisEvent struct {
 }
 
 type RecordingCompleteData struct {
+	RecordingID string  `json:"recordingId"`
+	PodcastID   string  `json:"podcastId"`
 	SessionID   string  `json:"sessionId"`
 	TotalChunks int     `json:"totalChunks"`
 	S3Bucket    string  `json:"s3Bucket"`

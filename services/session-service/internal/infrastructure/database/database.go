@@ -69,6 +69,8 @@ func Connect() *gorm.DB {
 			&domain.Session{},
 			&infrastructure.Pod{},
 			&infrastructure.PodParticipant{},
+			&infrastructure.Recording{},
+			&infrastructure.UserRecordingLink{},
 		)
 		if err != nil {
 			log.Fatal("Failed to migrate database:", err)

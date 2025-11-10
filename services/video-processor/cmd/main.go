@@ -20,7 +20,8 @@ func main() {
 
 	redisConsumer := infrastructure.NewRedisConsumer()
 	s3Client := infrastructure.NewS3Client()
-	videoProcessor := service.NewVideoProcessor(s3Client)
+	db := infrastructure.ConnectDB()
+	videoProcessor := service.NewVideoProcessor(s3Client, db)
 
 	log.Println("🎬 Video Processor Service started")
 	log.Println("📡 Listening for recording completion events...")
@@ -67,6 +68,8 @@ func processRecordingCompletionProto(protoEvent *eventspb.RedisEvent, videoProce
 
 	// Convert protobuf data to types.RecordingCompleteData
 	data := types.RecordingCompleteData{
+		RecordingID: recordingData.RecordingId,
+		PodcastID:   recordingData.PodcastId,
 		SessionID:   recordingData.SessionId,
 		TotalChunks: int(recordingData.TotalChunks),
 		S3Bucket:    recordingData.S3Bucket,

@@ -90,7 +90,7 @@ func (sm *SessionManager) TrackChunk(userID, podcastID, recordingID, s3Key, file
 	if isFinal {
 		session.State = "finalizing"
 		session.IsComplete = true
-		session.GracePeriodEnd = time.Now().Add(5 * time.Minute)
+		session.GracePeriodEnd = time.Now().Add(11 * time.Second)
 		
 		go sm.monitorGracePeriod(sessionKey, session)
 		sm.notifyRecordingComplete(session)
@@ -163,7 +163,7 @@ func (sm *SessionManager) RevokeSession(userID, podcastID string) error {
 }
 
 func (sm *SessionManager) monitorGracePeriod(sessionKey string, session *types.RecordingSession) {
-	time.Sleep(5 * time.Minute)
+	time.Sleep(11 * time.Second)
 	
 	sm.mutex.Lock()
 	defer sm.mutex.Unlock()
@@ -243,7 +243,7 @@ func (sm *SessionManager) notifyRecordingComplete(session *types.RecordingSessio
 }
 
 // ValidateUserPermissions checks if user has permission for the podcast/recording
-func ValidateUserPermissions(redisClient *redis.Client, userID, podcastID, recordingID string) bool {
+func ValidateUserPermissions(redisClient *redis.Client, userID, podcastID, recordingID string, isFinal bool) bool {
 	log.Printf("🔍 DEBUG: validateUserPermissions called for user %s, podcast %s, recording %s", userID, podcastID, recordingID)
 	
 	if redisClient == nil {
@@ -252,7 +252,11 @@ func ValidateUserPermissions(redisClient *redis.Client, userID, podcastID, recor
 	}
 
 	if recordingID != "" {
-		log.Printf("🔍 DEBUG: Checking recording participation for user %s in recording %s", userID, recordingID)
+		if !isRecordingValid(redisClient, recordingID, isFinal) {
+			log.Printf("❌ Recording %s is not active or grace period expired", recordingID)
+			return false
+		}
+		
 		if validateRecordingParticipation(redisClient, userID, recordingID) {
 			log.Printf("✅ User %s is participating in recording %s", userID, recordingID)
 			return true
@@ -279,6 +283,45 @@ func ValidateUserPermissions(redisClient *redis.Client, userID, podcastID, recor
 	}
 
 	log.Printf("❌ No permission found for user %s (podcast: %s, recording: %s)", userID, podcastID, recordingID)
+	return false
+}
+
+func isRecordingValid(redisClient *redis.Client, recordingID string, isFinal bool) bool {
+	ctx := context.Background()
+	
+	recordingKey := fmt.Sprintf("recording:%s", recordingID)
+	data, err := redisClient.Get(ctx, recordingKey).Result()
+	if err != nil {
+		if err == redis.Nil {
+			log.Printf("Recording %s not found in Redis (recording:%s), rejecting upload", recordingID, recordingKey)
+			return false
+		}
+		log.Printf("Failed to get recording %s: %v", recordingID, err)
+		return false
+	}
+	
+	var recordingData struct {
+		IsActive bool       `json:"is_active"`
+		EndedAt  *time.Time `json:"ended_at,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(data), &recordingData); err != nil {
+		log.Printf("Failed to deserialize recording data: %v", err)
+		return false
+	}
+	
+	if recordingData.IsActive {
+		return true
+	}
+	
+	if recordingData.EndedAt != nil && isFinal {
+		gracePeriodEnd := recordingData.EndedAt.Add(11 * time.Second)
+		if time.Now().Before(gracePeriodEnd) {
+			log.Printf("Recording ended but within grace period, allowing final chunk")
+			return true
+		}
+		log.Printf("Recording ended and grace period expired")
+	}
+	
 	return false
 }
 

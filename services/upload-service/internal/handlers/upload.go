@@ -59,7 +59,7 @@ func (h *UploadHandler) GetPreSignedURL(c *gin.Context) {
 		return
 	}
 
-	if !service.ValidateUserPermissions(h.redisClient, userID, req.PodcastID, req.RecordingID) {
+	if !service.ValidateUserPermissions(h.redisClient, userID, req.PodcastID, req.RecordingID, req.IsFinal) {
 		ipAddress, userAgent := getClientInfo(c)
 		monitoring.Logger.LogSessionValidationFailed(userID, req.PodcastID, "No permission for this podcast/recording", ipAddress, userAgent)
 		c.JSON(http.StatusForbidden, gin.H{"error": "No permission for this podcast/recording"})
@@ -76,9 +76,8 @@ func (h *UploadHandler) GetPreSignedURL(c *gin.Context) {
 	
 	s3Key := generateS3Key(req.FileName, userID, req.PodcastID, req.RecordingID, req.IsChunk)
 	putObjectInput := &s3.PutObjectInput{
-		Bucket:            aws.String(h.bucket),
-		Key:               aws.String(s3Key),
-		ContentType:       aws.String(req.ContentType),
+		Bucket: aws.String(h.bucket),
+		Key:    aws.String(s3Key),
 	}
 
 	expirationTime := 3 * time.Minute
@@ -129,7 +128,7 @@ func (h *UploadHandler) StartUploadSession(c *gin.Context) {
 		return
 	}
 
-	if !service.ValidateUserPermissions(h.redisClient, userIDStr, req.PodcastID, req.RecordingID) {
+	if !service.ValidateUserPermissions(h.redisClient, userIDStr, req.PodcastID, req.RecordingID, false) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "No permission for this podcast/recording"})
 		return
 	}

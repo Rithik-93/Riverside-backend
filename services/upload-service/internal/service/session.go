@@ -293,7 +293,7 @@ func isRecordingValid(redisClient *redis.Client, recordingID string, isFinal boo
 	data, err := redisClient.Get(ctx, recordingKey).Result()
 	if err != nil {
 		if err == redis.Nil {
-			log.Printf("Recording %s not found in Redis (recording:%s), rejecting upload", recordingID, recordingKey)
+			log.Printf("Recording %s not found in Redis, rejecting upload", recordingID)
 			return false
 		}
 		log.Printf("Failed to get recording %s: %v", recordingID, err)
@@ -328,38 +328,35 @@ func isRecordingValid(redisClient *redis.Client, recordingID string, isFinal boo
 func validateRecordingParticipation(redisClient *redis.Client, userID, recordingID string) bool {
 	ctx := context.Background()
 	
-	recordingKey := fmt.Sprintf("recording_session:%s", recordingID)
+	recordingKey := fmt.Sprintf("recording:%s", recordingID)
 	log.Printf("🔍 DEBUG: Looking for recording data with key: %s", recordingKey)
-	recordingData, err := redisClient.HGetAll(ctx, recordingKey).Result()
+	data, err := redisClient.Get(ctx, recordingKey).Result()
 	if err != nil {
 		log.Printf("❌ Failed to get recording data for recording %s: %v", recordingID, err)
 		return false
 	}
 
-	participants := recordingData["participants"]
-	log.Printf("🔍 DEBUG: Participants data: %s", participants)
-	if participants != "" {
-		var participantList []string
-		if err := json.Unmarshal([]byte(participants), &participantList); err == nil {
-			log.Printf("🔍 DEBUG: Parsed participants list: %+v", participantList)
-			for _, participant := range participantList {
-				if participant == userID {
-					log.Printf("✅ User %s found in participants list", userID)
-					return true
-				}
-			}
-		} else {
-			log.Printf("❌ Failed to parse participants JSON: %v", err)
+	var recordingData struct {
+		Participants []string `json:"participants"`
+		PodcastID    string   `json:"podcast_id"`
+		HostUserID   string   `json:"host_user_id"`
+	}
+	if err := json.Unmarshal([]byte(data), &recordingData); err != nil {
+		log.Printf("Failed to parse recording data: %v", err)
+		return false
+	}
+
+	for _, participant := range recordingData.Participants {
+		if participant == userID {
+			log.Printf("User %s in participants list", userID)
+			return true
 		}
-	} else {
-		log.Printf("❌ No participants data found in recording session")
 	}
 	
-	podcastID := recordingData["podcast_id"]
-	log.Printf("🔍 DEBUG: Podcast ID from recording data: %s", podcastID)
-	if podcastID != "" {
-		if validateUserInPodcast(redisClient, userID, podcastID) {
-			log.Printf("✅ User %s is in podcast %s (fallback check)", userID, podcastID)
+	log.Printf("🔍 DEBUG: Podcast ID from recording data: %s", recordingData.PodcastID)
+	if recordingData.PodcastID != "" {
+		if validateUserInPodcast(redisClient, userID, recordingData.PodcastID) {
+			log.Printf("User %s is in podcast %s (fallback check)", userID, recordingData.PodcastID)
 			return true
 		}
 	}
@@ -419,14 +416,22 @@ func validateUserInPodcast(redisClient *redis.Client, userID, podcastID string) 
 func validateRecordingInPodcast(redisClient *redis.Client, userID, podcastID, recordingID string) bool {
 	ctx := context.Background()
 	
-	recordingKey := fmt.Sprintf("recording_session:%s", recordingID)
-	recordingData, err := redisClient.HGetAll(ctx, recordingKey).Result()
+	recordingKey := fmt.Sprintf("recording:%s", recordingID)
+	data, err := redisClient.Get(ctx, recordingKey).Result()
 	if err != nil {
 		log.Printf("Failed to get recording data for recording %s: %v", recordingID, err)
 		return false
 	}
 	
-	if recordingData["podcast_id"] != podcastID {
+	var recordingData struct {
+		PodcastID string `json:"podcast_id"`
+	}
+	if err := json.Unmarshal([]byte(data), &recordingData); err != nil {
+		log.Printf("Failed to parse recording data: %v", err)
+		return false
+	}
+	
+	if recordingData.PodcastID != podcastID {
 		log.Printf("Recording %s does not belong to podcast %s", recordingID, podcastID)
 		return false
 	}

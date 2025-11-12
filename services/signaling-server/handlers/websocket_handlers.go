@@ -499,6 +499,12 @@ func (s *SignalingServer) handleStopRecording(client *types.Client, msg *types.M
 	recordingID := podcast.RecordingID
 	podcast.RecordingID = ""
 
+	if recordingID != "" {
+		if err := s.redisClient.EndRecordingSession(recordingID); err != nil {
+			log.Printf("Failed to end recording session: %v", err)
+		}
+	}
+
 	recordingMsg := &types.Message{
 		Type:      types.MessageTypeRecordingStopped,
 		From:      client.ID,

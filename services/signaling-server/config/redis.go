@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -230,24 +231,93 @@ func (r *RedisClient) CreateRecordingSessionWithParticipants(sessionID, userID, 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	participantsJSON, err := json.Marshal(participants)
+	type RecordingSessionData struct {
+		RecordingID       string            `json:"recording_id"`
+		PodcastID         string            `json:"podcast_id"`
+		HostUserID        string            `json:"host_user_id"`
+		RoomID            string            `json:"room_id"`
+		Participants      []string          `json:"participants"`
+		State             string            `json:"state"`
+		StartedAt         time.Time         `json:"started_at"`
+		EndedAt           *time.Time         `json:"ended_at,omitempty"`
+		Duration          int64              `json:"duration"`
+		TotalChunks       int                `json:"total_chunks"`
+		ParticipantChunks map[string]int     `json:"participant_chunks"`
+		IsActive          bool               `json:"is_active"`
+	}
+
+	recordingData := RecordingSessionData{
+		RecordingID:       recordingID,
+		PodcastID:         podcastID,
+		HostUserID:        userID,
+		RoomID:            "",
+		Participants:      participants,
+		State:             "started",
+		StartedAt:         time.Now(),
+		Duration:          0,
+		TotalChunks:       0,
+		ParticipantChunks: make(map[string]int),
+		IsActive:          true,
+	}
+
+	data, err := json.Marshal(recordingData)
 	if err != nil {
-		log.Printf("Failed to marshal participants: %v", err)
-		participantsJSON = []byte("[]")
+		return fmt.Errorf("failed to marshal recording data: %w", err)
 	}
 
-	sessionData := map[string]interface{}{
-		"session_id":        sessionID,
-		"host_user_id":      userID,
-		"podcast_id":        podcastID,
-		"recording_id":      recordingID,
-		"participants":      string(participantsJSON),
-		"created_at":        time.Now().Unix(),
-		"type":              "recording",
+	key := "recording:" + recordingID
+	return r.client.Set(ctx, key, data, 24*time.Hour).Err()
+}
+
+func (r *RedisClient) EndRecordingSession(recordingID string) error {
+	if r == nil || r.client == nil {
+		return nil
 	}
 
-	key := "recording_session:" + sessionID
-	return r.client.HSet(ctx, key, sessionData).Err()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	type RecordingSessionData struct {
+		RecordingID       string            `json:"recording_id"`
+		PodcastID         string            `json:"podcast_id"`
+		HostUserID        string            `json:"host_user_id"`
+		RoomID            string            `json:"room_id"`
+		Participants      []string          `json:"participants"`
+		State             string            `json:"state"`
+		StartedAt         time.Time         `json:"started_at"`
+		EndedAt           *time.Time         `json:"ended_at,omitempty"`
+		Duration          int64              `json:"duration"`
+		TotalChunks       int                `json:"total_chunks"`
+		ParticipantChunks map[string]int     `json:"participant_chunks"`
+		IsActive          bool               `json:"is_active"`
+	}
+
+	key := "recording:" + recordingID
+	data, err := r.client.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return fmt.Errorf("recording not found")
+		}
+		return err
+	}
+
+	var recordingData RecordingSessionData
+	if err := json.Unmarshal([]byte(data), &recordingData); err != nil {
+		return fmt.Errorf("failed to unmarshal recording data: %w", err)
+	}
+
+	now := time.Now()
+	recordingData.EndedAt = &now
+	recordingData.Duration = int64(now.Sub(recordingData.StartedAt).Seconds())
+	recordingData.State = "completed"
+	recordingData.IsActive = false
+
+	updatedData, err := json.Marshal(recordingData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal recording data: %w", err)
+	}
+
+	return r.client.Set(ctx, key, updatedData, 24*time.Hour).Err()
 }
 
 func (r *RedisClient) DeleteSession(sessionID, sessionType string) error {

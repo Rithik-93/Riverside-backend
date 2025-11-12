@@ -6,12 +6,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
 	"video-processor/internal/infrastructure"
 	"video-processor/pkg/types"
+
 	"gorm.io/gorm"
 )
 
@@ -62,17 +62,39 @@ func (vp *VideoProcessor) ProcessRecording(data *types.RecordingCompleteData, us
 }
 
 func (vp *VideoProcessor) concatenateVideoChunks(data *types.RecordingCompleteData, userID, roomID string) error {
-	// List objects from S3
-	s3Keys, err := vp.s3Client.ListChunks(data.S3Bucket, data.ChunkFolder)
-	if err != nil {
-		return fmt.Errorf("failed to list chunks from S3: %v", err)
-	}
 
-	if len(s3Keys) == 0 {
-		return fmt.Errorf("no chunks found in S3 folder: %s", data.ChunkFolder)
-	}
+	/*
+	Fetch s3 list until the final chunk is uploaded
+	because final chunks might be uploading
+	*/
+	var s3Keys []string
+	var err error
+	maxRetries := 5
+	retryDelay := 2 * time.Second
+	
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		s3Keys, err = vp.s3Client.ListChunks(data.S3Bucket, data.ChunkFolder)
+		if err != nil {
+			return fmt.Errorf("failed to list chunks from S3: %v", err)
+		}
 
-	log.Printf("✅ Processing %d chunks found in S3 folder", len(s3Keys))
+		if len(s3Keys) == 0 {
+			if attempt < maxRetries {
+				time.Sleep(retryDelay)
+				continue
+			}
+			return fmt.Errorf("no chunks found in S3 folder after %d attempts: %s", maxRetries, data.ChunkFolder)
+		}
+
+		if len(s3Keys) == data.TotalChunks {
+			break
+		}
+
+		if attempt < maxRetries {
+			time.Sleep(retryDelay)
+		}
+	}
+	
 
 	// Create temporary directory for processing
 	tempDir, err := os.MkdirTemp("", fmt.Sprintf("video_processing_%s", data.SessionID))
@@ -81,10 +103,10 @@ func (vp *VideoProcessor) concatenateVideoChunks(data *types.RecordingCompleteDa
 	}
 	defer os.RemoveAll(tempDir)
 
-	log.Printf("📁 Created temporary directory: %s", tempDir)
 
 	// Download all chunks with retry logic
 	var chunkFiles []string
+	var totalSize int64
 	for i, s3Key := range s3Keys {
 		chunkFile := filepath.Join(tempDir, fmt.Sprintf("chunk_%03d.webm", i))
 
@@ -107,9 +129,20 @@ func (vp *VideoProcessor) concatenateVideoChunks(data *types.RecordingCompleteDa
 			return fmt.Errorf("failed to download chunk %s after 3 attempts: %v", s3Key, downloadErr)
 		}
 
+		fileInfo, err := os.Stat(chunkFile)
+		if err != nil {
+			return fmt.Errorf("failed to stat downloaded chunk %s: %v", chunkFile, err)
+		}
+		
+		chunkSize := fileInfo.Size()
+		if chunkSize == 0 {
+			return fmt.Errorf("downloaded chunk %s is empty", s3Key)
+		}
+		
+		totalSize += chunkSize
 		chunkFiles = append(chunkFiles, chunkFile)
-		log.Printf("📥 Downloaded chunk %d/%d: %s", i+1, len(s3Keys), s3Key)
 	}
+	
 
 	// Concatenate chunks using simple file concatenation
 	finalVideoPath := filepath.Join(tempDir, "final_video.webm")
@@ -142,11 +175,6 @@ func (vp *VideoProcessor) saveRecordingToDB(data *types.RecordingCompleteData, u
 		return fmt.Errorf("database connection not available")
 	}
 
-	podID, err := strconv.ParseUint(data.PodcastID, 10, 64)
-	if err != nil {
-		return fmt.Errorf("failed to parse podcast_id to pod_id: %v", err)
-	}
-
 	var s3URL string
 	if data.S3Endpoint != "" {
 		s3URL = fmt.Sprintf("%s/%s/%s", data.S3Endpoint, data.S3Bucket, data.OutputPath)
@@ -158,23 +186,44 @@ func (vp *VideoProcessor) saveRecordingToDB(data *types.RecordingCompleteData, u
 	startedAt := time.Unix(data.StartTime, 0)
 	endedAt := time.Unix(data.EndTime, 0)
 
-	var recording infrastructure.Recording
-	err = vp.db.Where("recording_id = ?", data.RecordingID).FirstOrCreate(&recording, infrastructure.Recording{
-		PodID:       podID,
-		RecordingID: data.RecordingID,
-		State:       "started",
-		StartedAt:   startedAt,
-	}).Error
-	if err != nil {
-		return fmt.Errorf("failed to get or create recording: %v", err)
+	var existingRecording infrastructure.Recording
+	var podID uint64
+	err := vp.db.Where("recording_id = ?", data.RecordingID).First(&existingRecording).Error
+	if err == nil {
+		podID = existingRecording.PodID
+	} else {
+		/*
+		If recording doesn't exist, we can't create it without pod_id
+		Just save user_recording_link and return
+		*/
+		userLink := infrastructure.UserRecordingLink{
+			UserID:      userID,
+			RecordingID: data.RecordingID,
+			S3URL:       s3URL,
+		}
+		if err := vp.db.Where("user_id = ? AND recording_id = ?", userID, data.RecordingID).
+			Assign(userLink).
+			FirstOrCreate(&userLink).Error; err != nil {
+			return fmt.Errorf("failed to save user recording link: %v", err)
+		}
+		log.Printf("✅ Saved user recording link: RecordingID=%s, UserID=%s", data.RecordingID, userID)
+		return nil
 	}
 
-	recording.S3URL = &s3URL
-	recording.DurationMs = &durationMs
-	recording.State = "completed"
-	recording.EndedAt = &endedAt
-	if err := vp.db.Save(&recording).Error; err != nil {
-		return fmt.Errorf("failed to update recording: %v", err)
+	recording := infrastructure.Recording{
+		PodID:       podID,
+		RecordingID: data.RecordingID,
+		S3URL:       &s3URL,
+		DurationMs:  &durationMs,
+		State:       "completed",
+		StartedAt:   startedAt,
+		EndedAt:     &endedAt,
+	}
+	
+	if err := vp.db.Where("recording_id = ?", data.RecordingID).
+		Assign(recording).
+		FirstOrCreate(&recording).Error; err != nil {
+		return fmt.Errorf("failed to save recording: %v", err)
 	}
 
 	userLink := infrastructure.UserRecordingLink{
@@ -182,15 +231,13 @@ func (vp *VideoProcessor) saveRecordingToDB(data *types.RecordingCompleteData, u
 		RecordingID: data.RecordingID,
 		S3URL:       s3URL,
 	}
-	
-	err = vp.db.Where("user_id = ? AND recording_id = ?", userID, data.RecordingID).
+	if err := vp.db.Where("user_id = ? AND recording_id = ?", userID, data.RecordingID).
 		Assign(userLink).
-		FirstOrCreate(&userLink).Error
-	if err != nil {
+		FirstOrCreate(&userLink).Error; err != nil {
 		return fmt.Errorf("failed to save user recording link: %v", err)
 	}
 
-	log.Printf("Saved recording to database: RecordingID=%s, UserID=%s, S3URL=%s", data.RecordingID, userID, s3URL)
+	log.Printf("✅ Saved recording: RecordingID=%s, PodID=%d, UserID=%s, S3URL=%s", data.RecordingID, podID, userID, s3URL)
 	return nil
 }
 
@@ -225,4 +272,28 @@ func concatenateFiles(chunkFiles []string, outputPath string) error {
 
 	return nil
 }
+
+// func extractChunkIndexFromKey(s3Key string) int {
+// 	parts := bytes.Split([]byte(s3Key), []byte("chunk_"))
+// 	if len(parts) < 2 {
+// 		return -1
+// 	}
+
+// 	chunkPart := parts[1]
+// 	underscoreIndex := bytes.Index(chunkPart, []byte("_"))
+// 	if underscoreIndex == -1 {
+// 		return -1
+// 	}
+
+// 	chunkNum := chunkPart[:underscoreIndex]
+// 	var result int
+// 	for _, b := range chunkNum {
+// 		if b >= '0' && b <= '9' {
+// 			result = result*10 + int(b-'0')
+// 		} else {
+// 			break
+// 		}
+// 	}
+// 	return result
+// }
 

@@ -89,12 +89,16 @@ func (s *S3Client) ListChunks(bucket, prefix string) ([]string, error) {
 	sort.Slice(s3Keys, func(i, j int) bool {
 		chunkIndexI := extractChunkIndex(s3Keys[i])
 		chunkIndexJ := extractChunkIndex(s3Keys[j])
+		if chunkIndexI == chunkIndexJ {
+			return s3Keys[i] < s3Keys[j]
+		}
 		return chunkIndexI < chunkIndexJ
 	})
 
 	log.Printf("📋 Found %d chunks in S3 folder: %s", len(s3Keys), prefix)
 	for i, key := range s3Keys {
-		log.Printf("   Chunk %d: %s", i+1, key)
+		chunkIdx := extractChunkIndex(key)
+		log.Printf("   Chunk %d (index %d): %s", i+1, chunkIdx, key)
 	}
 
 	return s3Keys, nil

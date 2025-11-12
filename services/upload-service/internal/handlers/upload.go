@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -70,11 +71,25 @@ func (h *UploadHandler) GetPreSignedURL(c *gin.Context) {
 	if req.ChunkIndex == 0 && req.UserID != "" && req.PodcastID != "" {
 		if session, exists := h.sessionManager.GetSession(req.UserID, req.PodcastID); exists {
 			actualChunkIndex = len(session.Chunks)
-			log.Printf("🔧 TEMP FIX: Using session chunk count %d instead of 0", actualChunkIndex)
+			log.Printf("🔧 TEMP FIX: Using session chunk count %d instead of 0 (filename: %s)", actualChunkIndex, req.FileName)
 		}
 	}
 	
-	s3Key := generateS3Key(req.FileName, userID, req.PodcastID, req.RecordingID, req.IsChunk)
+	fileName := req.FileName
+	if actualChunkIndex != req.ChunkIndex && strings.HasPrefix(req.FileName, "chunk_") {
+		parts := strings.Split(req.FileName, "_")
+		if len(parts) >= 3 {
+			timestamp := parts[len(parts)-1]
+			if strings.HasSuffix(timestamp, ".webm") {
+				fileName = fmt.Sprintf("chunk_%d_%s", actualChunkIndex, timestamp)
+			} else {
+				fileName = fmt.Sprintf("chunk_%d_%s.webm", actualChunkIndex, timestamp)
+			}
+			log.Printf("Fixed filename: %s -> %s (chunk index corrected from %d to %d)", req.FileName, fileName, req.ChunkIndex, actualChunkIndex)
+		}
+	}
+	
+	s3Key := generateS3Key(fileName, userID, req.PodcastID, req.RecordingID, req.IsChunk)
 	putObjectInput := &s3.PutObjectInput{
 		Bucket: aws.String(h.bucket),
 		Key:    aws.String(s3Key),
@@ -92,7 +107,7 @@ func (h *UploadHandler) GetPreSignedURL(c *gin.Context) {
 	}
 
 	if req.UserID != "" && req.PodcastID != "" && req.RecordingID != "" {
-		h.sessionManager.TrackChunk(req.UserID, req.PodcastID, req.RecordingID, s3Key, req.FileName, req.Timestamp, req.IsFinal, actualChunkIndex)
+		h.sessionManager.TrackChunk(req.UserID, req.PodcastID, req.RecordingID, s3Key, fileName, req.Timestamp, req.IsFinal, actualChunkIndex)
 	}
 
 	response := types.PreSignedURLResponse{

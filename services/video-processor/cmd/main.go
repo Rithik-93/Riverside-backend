@@ -52,9 +52,11 @@ func listenForRecordingEvents(redisConsumer *infrastructure.RedisConsumer, video
 		}
 
 		// Process recording completion events
-		if protoEvent.EventType == "recording_complete" {
-			log.Printf("📥 Received recording completion event (protobuf) for User: %s", protoEvent.UserId)
+		eventType := protoEvent.GetEventType()
+		log.Printf("🔍 Received event type: %s", eventType)
+		if eventType == "recording_complete" {
 			go processRecordingCompletionProto(protoEvent, videoProcessor)
+		} else {
 		}
 	}
 }
@@ -66,22 +68,25 @@ func processRecordingCompletionProto(protoEvent *eventspb.RedisEvent, videoProce
 		return
 	}
 
+	log.Printf("Recording data extracted: SessionID=%s, RecordingID=%s, TotalChunks=%d", 
+		recordingData.GetSessionId(), recordingData.GetRecordingId(), recordingData.GetTotalChunks())
+
 	// Convert protobuf data to types.RecordingCompleteData
 	data := types.RecordingCompleteData{
-		RecordingID: recordingData.RecordingId,
-		PodcastID:   recordingData.PodcastId,
-		SessionID:   recordingData.SessionId,
-		TotalChunks: int(recordingData.TotalChunks),
-		S3Bucket:    recordingData.S3Bucket,
-		S3Region:    recordingData.S3Region,
-		S3Endpoint:  recordingData.S3Endpoint,
-		StartTime:   recordingData.StartTime,
-		EndTime:     recordingData.EndTime,
-		Duration:    recordingData.Duration,
-		OutputPath:  recordingData.OutputPath,
-		ContentType: recordingData.ContentType,
-		ChunkFolder: recordingData.ChunkFolder,
+		RecordingID: recordingData.GetRecordingId(),
+		PodcastID:   recordingData.GetPodcastId(),
+		SessionID:   recordingData.GetSessionId(),
+		TotalChunks: int(recordingData.GetTotalChunks()),
+		S3Bucket:    recordingData.GetS3Bucket(),
+		S3Region:    recordingData.GetS3Region(),
+		S3Endpoint:  recordingData.GetS3Endpoint(),
+		StartTime:   recordingData.GetStartTime(),
+		EndTime:     recordingData.GetEndTime(),
+		Duration:    recordingData.GetDuration(),
+		OutputPath:  recordingData.GetOutputPath(),
+		ContentType: recordingData.GetContentType(),
+		ChunkFolder: recordingData.GetChunkFolder(),
 	}
 
-	videoProcessor.ProcessRecording(&data, protoEvent.UserId, protoEvent.RoomId)
+	videoProcessor.ProcessRecording(&data, protoEvent.GetUserId(), protoEvent.GetRoomId())
 }

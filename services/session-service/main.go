@@ -50,6 +50,7 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
 	podcastRepo := repository.NewPodcastRepository(db)
+	recordingRepo := repository.NewRecordingRepository(db)
 
 	accessSecret := os.Getenv("JWT_ACCESS_SECRET")
 	if accessSecret == "" {
@@ -83,7 +84,7 @@ func main() {
 	authService := domain.NewAuthService(userRepo, sessionRepo, tokenService, nil, redisSessionService)
 	
 	authHandler := handlers.NewAuthHandler(authService)
-	podcastHandler := handlers.NewPodcastHandler(podcastRepo, redisSessionService)
+	podcastHandler := handlers.NewPodcastHandler(podcastRepo, recordingRepo, userRepo, redisSessionService)
 	turnHandler := handlers.NewTurnHandler()
 
 	redisConsumer := infrastructure.NewRedisConsumer(db)
@@ -148,6 +149,8 @@ func main() {
 	{
 		podcasts.POST("/create", podcastHandler.CreatePodcast)
 		podcasts.GET("/check/:podcastId", podcastHandler.CheckPodcast)
+		podcasts.GET("/my-podcasts", podcastHandler.GetMyPodcasts)
+		podcasts.GET("/:podcastId/recordings", podcastHandler.GetPodcastRecordings)
 	}
 
 	turnGroup := router.Group("/turn")

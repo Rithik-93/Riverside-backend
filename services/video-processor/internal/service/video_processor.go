@@ -192,22 +192,30 @@ func (vp *VideoProcessor) saveRecordingToDB(data *types.RecordingCompleteData, u
 	if err == nil {
 		podID = existingRecording.PodID
 	} else {
-		/*
-		If recording doesn't exist, we can't create it without pod_id
-		Just save user_recording_link and return
-		*/
-		userLink := infrastructure.UserRecordingLink{
-			UserID:      userID,
-			RecordingID: data.RecordingID,
-			S3URL:       s3URL,
+		type Pod struct {
+			ID uint64 `gorm:"column:id"`
 		}
-		if err := vp.db.Where("user_id = ? AND recording_id = ?", userID, data.RecordingID).
-			Assign(userLink).
-			FirstOrCreate(&userLink).Error; err != nil {
-			return fmt.Errorf("failed to save user recording link: %v", err)
+		var pod Pod
+		
+		err = vp.db.Table("pods").
+			Where("host_user_id = ? AND is_active = ?", userID, true).
+			Order("created_at DESC").
+			First(&pod).Error
+		
+		if err != nil {
+			err = vp.db.Table("pods").
+				Joins("INNER JOIN pod_participants ON pods.id = pod_participants.pod_id").
+				Where("pod_participants.user_id = ? AND pods.is_active = ?", userID, true).
+				Order("pods.created_at DESC").
+				First(&pod).Error
 		}
-		log.Printf("✅ Saved user recording link: RecordingID=%s, UserID=%s", data.RecordingID, userID)
-		return nil
+		
+		if err != nil {
+			return fmt.Errorf("cannot find pod for user %s: %v", userID, err)
+		}
+		
+		podID = pod.ID
+		log.Printf("Found pod_id=%d for user %s", podID, userID)
 	}
 
 	recording := infrastructure.Recording{

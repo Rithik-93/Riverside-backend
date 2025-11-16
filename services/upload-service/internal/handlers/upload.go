@@ -247,6 +247,56 @@ func (h *UploadHandler) RevokeUploadSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "revoked"})
 }
 
+func (h *UploadHandler) GetDownloadURL(c *gin.Context) {
+	var req struct {
+		S3URL string `json:"s3_url" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "s3_url is required"})
+		return
+	}
+
+	s3Key := req.S3URL
+	if strings.HasPrefix(s3Key, "https://") {
+		idx := strings.Index(s3Key[8:], "/")
+		if idx != -1 {
+			s3Key = s3Key[8+idx+1:]
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid S3 URL format"})
+			return
+		}
+	} else if strings.HasPrefix(s3Key, "s3://") {
+		parts := strings.SplitN(s3Key[5:], "/", 2)
+		if len(parts) >= 2 {
+			s3Key = parts[1]
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid S3 URL format"})
+			return
+		}
+	}
+
+	getObjectInput := &s3.GetObjectInput{
+		Bucket: aws.String(h.bucket),
+		Key:    aws.String(s3Key),
+	}
+
+	expirationTime := 15 * time.Minute
+	presignClient := s3.NewPresignClient(h.s3Client)
+	preSignedURL, err := presignClient.PresignGetObject(context.TODO(), getObjectInput, func(opts *s3.PresignOptions) {
+		opts.Expires = expirationTime
+	})
+	if err != nil {
+		log.Printf("Failed to generate download URL: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate download URL"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"download_url": preSignedURL.URL,
+		"expires_in":   int(expirationTime.Seconds()),
+	})
+}
+
 func validatePresignedURLRequest(req *types.PreSignedURLRequest) error {
 	if req.FileName == "" {
 		return fmt.Errorf("file name is required")

@@ -156,6 +156,7 @@ func main() {
 		protected.POST("/upload/finalize", uploadHandler.FinalizeUploadSession)
 		protected.POST("/upload/revoke", uploadHandler.RevokeUploadSession)
 		protected.GET("/upload/status/:uploadId", uploadHandler.GetUploadStatus)
+		protected.POST("/upload/download-url", uploadHandler.GetDownloadURL)
 	}
 
 	port := os.Getenv("PORT")

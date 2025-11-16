@@ -54,3 +54,12 @@ func (r *PodcastRepository) ExistsByID(id int64) (bool, error) {
 	return count > 0, nil
 }
 
+func (r *PodcastRepository) GetAllByHostUserID(hostUserID string) ([]domain.Podcast, error) {
+	var podcasts []domain.Podcast
+	err := r.db.Where("host_user_id = ? AND is_active = ?", hostUserID, true).
+		Order("created_at DESC").
+		Find(&podcasts).Error
+	
+	return podcasts, err
+}
+

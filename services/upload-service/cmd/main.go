@@ -16,7 +16,6 @@ import (
 	"github.com/lakeside/services/upload-service/internal/handlers"
 	"github.com/lakeside/services/upload-service/internal/middleware"
 	"github.com/lakeside/services/upload-service/internal/service"
-	"github.com/lakeside/services/upload-service/monitoring"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -110,7 +109,6 @@ func main() {
 
 	s3Client, bucket := initS3()
 	redisClient := initRedis()
-	monitoring.InitializeAuditLogger()
 	
 	sessionManager := service.NewSessionManager(redisClient, bucket)
 	uploadHandler := handlers.NewUploadHandler(s3Client, bucket, redisClient, sessionManager)

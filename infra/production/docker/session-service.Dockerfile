@@ -11,6 +11,8 @@ COPY backend/services/session-service/go.mod backend/services/session-service/go
 RUN go mod download && go mod verify
 
 COPY backend/services/session-service/. .
+RUN mkdir -p internal/infrastructure/database/migrations && \
+    cp -r migrations/* internal/infrastructure/database/migrations/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s -X main.version=${VERSION:-dev} -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     -trimpath \

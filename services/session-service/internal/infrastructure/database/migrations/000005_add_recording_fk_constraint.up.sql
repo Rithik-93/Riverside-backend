@@ -9,9 +9,3 @@ FOREIGN KEY (recording_id) REFERENCES recordings(recording_id)
 ON DELETE CASCADE;
 
 
-
-
-
-
-
-

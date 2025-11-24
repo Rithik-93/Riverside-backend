@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -33,30 +34,37 @@ func AuthController(c *gin.Context) {
 	db := database.Connect()
 	userRepo := repository.NewUserRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
-	
+
 	accessSecret := os.Getenv("JWT_ACCESS_SECRET")
 	if accessSecret == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "JWT_ACCESS_SECRET not configured"})
 		return
 	}
-	
+
 	refreshSecret := os.Getenv("JWT_REFRESH_SECRET")
 	if refreshSecret == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "JWT_REFRESH_SECRET not configured"})
 		return
 	}
-	
+
 	tokenService := service.NewTokenService(accessSecret, refreshSecret)
 
-	username := strings.Split(gothUser.Email, "@")[0]
+	// Generate username from email, but make it unique if needed
+	baseUsername := strings.Split(gothUser.Email, "@")[0]
+	username := baseUsername
 
 	existingUser, err := userRepo.GetByEmail(gothUser.Email)
 	if err != nil {
+		_, err := userRepo.GetByUsername(username)
+		if err == nil {
+			username = baseUsername + "_" + strings.ToLower(gothUser.UserID[:8])
+		}
+
 		fullName := gothUser.Name
 		if fullName == "" {
 			fullName = username
 		}
-		
+
 		newUser, err := domain.NewUser(gothUser.Email, username, fullName, "")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user: " + err.Error()})
@@ -65,19 +73,25 @@ func AuthController(c *gin.Context) {
 
 		err = userRepo.Create(newUser)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save user"})
-			return
+			if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+				username = baseUsername + "_" + strings.ToLower(gothUser.UserID)
+				newUser.Username = username
+				err = userRepo.Create(newUser)
+			}
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save user: " + err.Error()})
+				return
+			}
 		}
 		existingUser = newUser
 	} else {
-		if gothUser.Name != "" {
+		// User exists - only update full name if provided, don't change username
+		if gothUser.Name != "" && gothUser.Name != existingUser.FullName {
 			existingUser.FullName = gothUser.Name
-		}
-		existingUser.Username = username
-		err = userRepo.Update(existingUser)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
-			return
+			err = userRepo.Update(existingUser)
+			if err != nil {
+				log.Printf("Warning: Failed to update user profile: %v", err)
+			}
 		}
 	}
 
@@ -99,12 +113,12 @@ func AuthController(c *gin.Context) {
 
 	c.SetCookie("access_token", "", -1, "/", "", secure, true)
 	c.SetCookie("refresh_token", "", -1, "/", "", secure, true)
-	
+
 	if cookieDomain != "" {
 		c.SetCookie("access_token", "", -1, "/", cookieDomain, secure, true)
 		c.SetCookie("refresh_token", "", -1, "/", cookieDomain, secure, true)
 	}
-	
+
 	c.SetCookie("access_token", accessToken, 24*60*60, "/", cookieDomain, secure, true)
 	c.SetCookie("refresh_token", refreshToken, 7*24*60*60, "/", cookieDomain, secure, true)
 

@@ -13,7 +13,7 @@ import (
 const (
 	key    = "lakeside"
 	MaxAge = 86400 * 30
-	isProd = false
+	isProd = true
 )
 
 func NewAuth() {

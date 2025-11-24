@@ -26,6 +26,3 @@ func (r *RecordingRepository) GetUserLinksByRecordingID(recordingID string) ([]i
 	err := r.db.Where("recording_id = ?", recordingID).Find(&links).Error
 	return links, err
 }
-
-
-

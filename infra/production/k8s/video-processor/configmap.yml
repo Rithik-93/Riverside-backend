@@ -4,6 +4,7 @@ metadata:
   name: video-processor-config
   namespace: default
 data:
+  PORT: "8082"
   REDIS_ADDR: "redis-service:6379"
   AWS_REGION: "blr1"
   S3_ENDPOINT: "https://blr1.digitaloceanspaces.com"

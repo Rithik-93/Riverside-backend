@@ -64,6 +64,16 @@ spec:
             secretKeyRef:
               name: session-service-secrets
               key: GOOGLE_CLIENT_SECRET
+        - name: GOOGLE_REDIRECT_URL
+          valueFrom:
+            secretKeyRef:
+              name: session-service-secrets
+              key: GOOGLE_REDIRECT_URL
+        - name: ENV
+          valueFrom:
+            configMapKeyRef:
+              name: session-service-config
+              key: ENV
         - name: BACKEND_URL
           valueFrom:
             configMapKeyRef:

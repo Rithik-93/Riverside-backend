@@ -21,7 +21,7 @@ spec:
         image: rithik933/lakeside-video-processor:v10
         imagePullPolicy: Always
         ports:
-        - containerPort: 8083
+        - containerPort: 8082
           protocol: TCP
         env:
         - name: REDIS_ADDR
@@ -59,6 +59,16 @@ spec:
             secretKeyRef:
               name: video-processor-secrets
               key: AWS_SECRET_ACCESS_KEY
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: video-processor-secrets
+              key: DATABASE_URL
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: video-processor-config
+              key: PORT
         resources:
           requests:
             memory: "128Mi"

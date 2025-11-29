@@ -11,4 +11,5 @@ data:
   FRONTEND_URL: "https://lakeside.rithik.xyz/dashboard/home"
   COOKIE_DOMAIN: ".rithik.xyz"
   COOKIE_SECURE: "true"
+  ENV: "production"
 

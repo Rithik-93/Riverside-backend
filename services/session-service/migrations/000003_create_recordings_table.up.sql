@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS recordings (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_recordings_recording_id ON recordings(recording_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_recordings_recording_id_pod_id ON recordings(recording_id, pod_id);
 CREATE INDEX IF NOT EXISTS idx_recordings_pod_id ON recordings(pod_id);
 CREATE INDEX IF NOT EXISTS idx_recordings_state ON recordings(state);
 
